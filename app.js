@@ -71,7 +71,6 @@ function getNextGrantDate() {
 }
 
 // ===== 更新 =====
-
   let now = new Date();
   let months = getMonthsDiff(joinDate, now);
 
@@ -88,6 +87,8 @@ function getNextGrantDate() {
 
   renderHistory();
   renderStats();
+  renderChart();
+　renderYearly();
 }
 
 // ===== 追加 =====
@@ -209,6 +210,24 @@ function renderYearly() {
   }
 
   document.getElementById("yearly").textContent = text;
+}
+
+function renderChart() {
+  const data = getYearlyStats();
+
+  const labels = Object.keys(data);
+  const values = Object.values(data);
+
+  new Chart(document.getElementById("chart"), {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "有給使用日数",
+        data: values
+      }]
+    }
+  });
 }
 
 update();

@@ -23,6 +23,12 @@ window.onload = () => {
     document.getElementById("joinDateInput").value = saved;
     joinDate = new Date(saved);
   }
+  function update() {
+  if (!joinDate) {
+    document.getElementById("remain").textContent = "-";
+    document.getElementById("nextGrant").textContent = "入社日を設定してください";
+    return;
+  }
   update();
 };
 
@@ -53,7 +59,7 @@ function getUsed() {
 function getNextGrantDate() {
   if (!joinDate) return "-";
 
-  let months = getMonthsDiff(joinDate, new Date());
+  let months = getMonthsDiff(joinDate, now);
   let nextMonths = [6,18,30,42,54,66,78].find(m => m > months);
 
   if (!nextMonths) return "最大付与済";
@@ -65,12 +71,6 @@ function getNextGrantDate() {
 }
 
 // ===== 更新 =====
-function update() {
-  if (!joinDate) {
-    document.getElementById("remain").textContent = "-";
-    document.getElementById("nextGrant").textContent = "入社日を設定してください";
-    return;
-  }
 
   let now = new Date();
   let months = getMonthsDiff(joinDate, now);
@@ -92,10 +92,10 @@ function update() {
 
 // ===== 追加 =====
 function addLeave(day) {
-  if (!selectedDate) {
-    alert("日付を選択してください");
-    return;
-  }
+  if (history.some(h => h.date === selectedDate)) {
+  alert("この日は既に登録されています");
+  return;
+}
 
   history.push({
     date: selectedDate,
@@ -103,6 +103,7 @@ function addLeave(day) {
   });
 
   localStorage.setItem("history", JSON.stringify(history));
+  history.sort((a, b) => a.date.localeCompare(b.date));
   update();
 }
 
@@ -131,9 +132,13 @@ function renderHistory() {
 
 // ===== 集計 =====
 function renderStats() {
-  let now = new Date();
+  
+  function parseDate(str) {
+  const [y, m, d] = str.split("-");
+  return new Date(y, m - 1, d);
+}
+  
   let thisMonth = now.toISOString().slice(0,7);
-
   let monthly = history
     .filter(h => h.date.startsWith(thisMonth))
     .reduce((sum, h) => sum + h.value, 0);

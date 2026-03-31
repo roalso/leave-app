@@ -170,4 +170,45 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js");
 }
 
+function getRemainWithCarry() {
+  let now = new Date();
+  let months = getMonthsDiff(joinDate, now);
+
+  let total = getGrantedDays(months);
+  let used = getUsed();
+
+  let remain = total - used;
+
+  //  簡易繰越
+  if (remain > 40) remain = 40;
+  if (remain < 0) remain = 0;
+
+  return remain;
+}
+
+function getYearlyStats() {
+  const result = {};
+
+  history.forEach(h => {
+    const year = h.date.slice(0, 4);
+
+    if (!result[year]) result[year] = 0;
+
+    result[year] += h.value;
+  });
+
+  return result;
+}
+
+function renderYearly() {
+  const data = getYearlyStats();
+  let text = "";
+
+  for (let y in data) {
+    text += `${y}年: ${data[y]}日\n`;
+  }
+
+  document.getElementById("yearly").textContent = text;
+}
+
 update();

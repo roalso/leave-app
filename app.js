@@ -146,12 +146,12 @@ function importData() {
 
   lines.forEach(line => {
     const [date, value] = line.split(",");
-    if (date && value) {
-      history.push({
-        date: date.trim(),
-        value: parseFloat(value)
-      });
-    }
+    if (!date || isNaN(value)) return;
+
+    history.push({
+      date: date.trim(),
+      value: parseFloat(value)
+    });
   });
 
   localStorage.setItem("history", JSON.stringify(history));

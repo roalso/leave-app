@@ -20,3 +20,11 @@ self.addEventListener("fetch", event => {
       .then(response => response || fetch(event.request))
   );
 });
+
+self.addEventListener("install", e => {
+  e.waitUntil(
+    caches.open("app").then(cache => {
+      return cache.addAll(["./", "index.html", "style.css", "app.js"]);
+    })
+  );
+});

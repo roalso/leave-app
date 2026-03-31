@@ -1,30 +1,30 @@
 // ===== 初期データ =====
-let history = JSON.parse(localStorage.getItem("history")) || [];
 let joinDate = localStorage.getItem("joinDate")
   ? new Date(localStorage.getItem("joinDate"))
   : null;
 
+let history = JSON.parse(localStorage.getItem("history")) || [];
 let selectedDate = null;
 
 // ===== カレンダー =====
 flatpickr("#datePicker", {
   locale: flatpickr.l10ns.ja,
   dateFormat: "Y-m-d",
+  disableMobile: true,
   onChange: function(selectedDates, dateStr) {
     selectedDate = dateStr;
   }
 });
 
 // ===== 入社日保存 =====
-function saveJoinDate() {
-  const input = document.getElementById("joinDateInput").value;
-  if (!input) return;
-
-  localStorage.setItem("joinDate", input);
-  joinDate = new Date(input);
-
+window.onload = () => {
+  const saved = localStorage.getItem("joinDate");
+  if (saved) {
+    document.getElementById("joinDateInput").value = saved;
+    joinDate = new Date(saved);
+  }
   update();
-}
+};
 
 // ===== 有給付与 =====
 function getGrantedDays(months) {

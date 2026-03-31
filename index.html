@@ -10,6 +10,11 @@
   <!-- flatpickr -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+　<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+　<script src="app.js"></script>
+　<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+　<canvas id="chart"></canvas>
 </head>
 <body>
 
@@ -41,12 +46,9 @@
 <button id="importBtn" onclick="importData()">一括登録</button>
   <!-- 履歴 -->
   <div id="history"></div>
-
 </div>
-
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
-<script src="app.js"></script>
+<p id="yearly"></p>
+  
 
 </body>
 </html>

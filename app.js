@@ -78,6 +78,9 @@ function update() {
   let total = getGrantedDays(months);
   let used = getUsed();
 
+  let remain = total - used;
+　if (remain < 0) remain = 0;
+
   document.getElementById("remain").textContent = (total - used).toFixed(1);
 
   document.getElementById("nextGrant").textContent =

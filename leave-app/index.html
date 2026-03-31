@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>有給管理</title>
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+</head>
+<body>
+
+<div class="container">
+  <h1>有給管理</h1>
+  <div class="card">
+    <p>残り</p>
+    <p id="nextGrant"></p>
+    <p id="stats"></p>
+    <h2 id="remain">0</h2>
+    <span>日</span>
+  </div>
+
+  <!-- カレンダー -->
+ <div class="section">
+  <h3>基本設定</h3>
+
+  <div class="row">
+    <input type="date" id="joinDateInput">
+    <button onclick="saveJoinDate()">入社日設定</button>
+  </div>
+</div>
+  <input type="text" id="datePicker" placeholder="日付を選択">
+  <div class="buttons">
+    <button onclick="addLeave(1)">1日</button>
+    <button onclick="addLeave(0.5)">半休</button>
+  </div>
+<textarea id="bulkInput" placeholder="例：2026-03-01,1 2026-03-05,0.5"></textarea>
+<button id="importBtn" onclick="importData()">一括登録</button>
+  <!-- 履歴 -->
+  <div id="history"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>

@@ -35,7 +35,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 .empty{text-align:center;color:#94a3b8;padding:16px}.small{font-size:12px;color:#64748b}
 footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 
-/* iPhone/スマホ向け横並びスタイルの最適化 */
+/* iPhone/スマホ向けレイアウト調整 */
 @media(max-width:599px){
   .row {
     display: flex !important;
@@ -83,7 +83,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 
 <section class="card">
 <h2>基本設定</h2>
-<div class="notice">入社日から付与日を自動計算できます。一般的な法定付与を基準にしています。</div>
+<div class="notice">入社日から付与日と繰越日数を自動計算できます。</div>
 <div class="row form-row">
 <div class="field"><label for="join">入社日</label><input id="join" type="date"></div>
 <div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10"></div>
@@ -151,7 +151,6 @@ function fmt(n) {
   return Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace(/\.0$/, '');
 }
 
-// Safariに強い日付パース関数
 function parseDate(s) {
   if (!s) return new Date();
   const parts = s.split("-");
@@ -161,7 +160,6 @@ function parseDate(s) {
   return new Date(s);
 }
 
-// 正しい曜日を取得する関数
 function getDayOfWeek(dStr) {
   const d = parseDate(dStr);
   if (isNaN(d.getTime())) return "";
@@ -181,6 +179,7 @@ function currentYear() {
   return new Date().getFullYear();
 }
 
+// 付与日数および繰越の自動計算
 function autoGrant() {
   const joinVal = document.getElementById("join").value;
   if (!joinVal) {
@@ -192,38 +191,34 @@ function autoGrant() {
     alert("入社日を正しく入力してください。");
     return;
   }
+
   const now = new Date();
-  // 1. 勤続年数の計算
   let years = now.getFullYear() - j.getFullYear();
   if (now.getMonth() < j.getMonth() || (now.getMonth() === j.getMonth() && now.getDate() < j.getDate())) {
     years--;
   }
-  // 2. 法定の今年度付与日数テーブル
+
+  // 法定付与日数テーブル [0年, 1年, 2年, 3年, 4年, 5年, 6年以上]
   const table = [10, 11, 12, 14, 16, 18, 20];
   const grantDays = table[Math.min(Math.max(years, 0), 6)];
 
-  // 3. 前年度（直前1年間）の使用日数を集計して繰越を自動計算
+  // 前年度の取得数を集計して繰越日数を算出
   const lastYear = now.getFullYear() - 1;
   const lastYearUsed = data.leaves
     .filter(x => parseDate(x.date).getFullYear() === lastYear)
     .reduce((a, x) => a + Number(x.days), 0);
 
-// 前年度の付与日数（概算）から前年度使用分を引いた残数を繰越とする
   const lastYearGrant = table[Math.min(Math.max(years - 1, 0), 6)];
   const estimatedCarry = Math.max(0, lastYearGrant - lastYearUsed);
   const carryLimit = Number(document.getElementById("carryLimit").value) || 40;
   const finalCarry = Math.min(estimatedCarry, carryLimit);
 
-// 4. 画面とデータ構造へ反映
+  // 入力フォームへ数値をセットして保存
   document.getElementById("baseDays").value = grantDays;
   document.getElementById("carryIn").value = finalCarry;
-  
-  data.settings.join = joinVal;
-  data.settings.baseDays = grantDays;
-  data.settings.carryIn = finalCarry;
-  
+
   saveSettings();
-  alert(`付与日数 (${grantDays}日) と繰越日数 (${finalCarry}日) を自動計算して設定しました。`);
+  alert(`付与日数 (${grantDays}日) と前年度からの繰越 (${finalCarry}日) を自動計算しました。`);
 }
 
 function saveSettings() {
@@ -371,23 +366,29 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// 描画と数値計算の統合処理
 function render() {
   const s = data.settings;
-  const baseDays = Number(s.baseDays) || 0; // 今年の付与日数
-  const carryIn = Number(s.carryIn) || 0; // 前年度からの繰越
-  const carryLimit = Number(s.carryLimit) ?? 40; // 繰越上限
-
-  // 実際に有効な繰越日数（上限を考慮）
+  const baseDays = Number(s.baseDays) || 0;
+  const carryIn = Number(s.carryIn) || 0;
+  const carryLimit = Number(s.carryLimit) ?? 40;
+  
+  // 有効な繰越数
   const effectiveCarry = Math.min(carryIn, carryLimit);
- // 総保有日数 = 今年の付与日数 + 有効繰越日数
-  const totalAvailable = baseDays + effectiveCarry;
-  // 累計使用日数
-  const used = data.leaves.reduce((a, x) => a + Number(x.days), 0);
-  // 残日数 = 総保有日数 - 使用日数
-  const remain = Math.max(0, totalAvailable - used);
-  // 使用率（付与日数＋繰越日数の合計に対する消化割合）
-  const rate = totalAvailable ? Math.min(100, (used / totalAvailable) * 100) : 0;
 
+  // 合計付与日数 = 今年の付与 + 繰越
+  const totalAvailable = baseDays + effectiveCarry;
+  
+  // 登録された使用日数の全合計
+  const used = data.leaves.reduce((a, x) => a + Number(x.days), 0);
+  
+  // 残日数 = 合計 - 使用数
+  const remain = Math.max(0, totalAvailable - used);
+  
+  // 使用率
+  const rate = totalAvailable > 0 ? Math.min(100, (used / totalAvailable) * 100) : 0;
+
+  // 上部のカードへ数値を反映
   document.getElementById("remain").textContent = fmt(remain) + "日";
   document.getElementById("grant").textContent = fmt(baseDays) + "日";
   document.getElementById("monthUsed").textContent = fmt(monthUsed()) + "日";
@@ -395,6 +396,7 @@ function render() {
   document.getElementById("rate").textContent = Math.round(rate) + "%";
   document.getElementById("rateBar").style.width = rate + "%";
 
+  // フォーム上の入力欄へセット
   document.getElementById("join").value = s.join || "";
   document.getElementById("baseDays").value = s.baseDays || "";
   document.getElementById("carryIn").value = s.carryIn || 0;
@@ -434,7 +436,7 @@ function importData(e) {
   e.target.value = "";
 }
 
-// 初期化実行
+// 初回レンダリング
 document.getElementById("useDate").value = todayKey();
 render();
 </script>

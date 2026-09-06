@@ -193,17 +193,37 @@ function autoGrant() {
     return;
   }
   const now = new Date();
+  // 1. 勤続年数の計算
   let years = now.getFullYear() - j.getFullYear();
   if (now.getMonth() < j.getMonth() || (now.getMonth() === j.getMonth() && now.getDate() < j.getDate())) {
     years--;
   }
+  // 2. 法定の今年度付与日数テーブル
   const table = [10, 11, 12, 14, 16, 18, 20];
   const grantDays = table[Math.min(Math.max(years, 0), 6)];
-  
+
+  // 3. 前年度（直前1年間）の使用日数を集計して繰越を自動計算
+  const lastYear = now.getFullYear() - 1;
+  const lastYearUsed = data.leaves
+    .filter(x => parseDate(x.date).getFullYear() === lastYear)
+    .reduce((a, x) => a + Number(x.days), 0);
+
+// 前年度の付与日数（概算）から前年度使用分を引いた残数を繰越とする
+  const lastYearGrant = table[Math.min(Math.max(years - 1, 0), 6)];
+  const estimatedCarry = Math.max(0, lastYearGrant - lastYearUsed);
+  const carryLimit = Number(document.getElementById("carryLimit").value) || 40;
+  const finalCarry = Math.min(estimatedCarry, carryLimit);
+
+// 4. 画面とデータ構造へ反映
   document.getElementById("baseDays").value = grantDays;
+  document.getElementById("carryIn").value = finalCarry;
+  
   data.settings.join = joinVal;
   data.settings.baseDays = grantDays;
+  data.settings.carryIn = finalCarry;
+  
   saveSettings();
+  alert(`付与日数 (${grantDays}日) と繰越日数 (${finalCarry}日) を自動計算して設定しました。`);
 }
 
 function saveSettings() {

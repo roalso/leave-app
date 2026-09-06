@@ -56,7 +56,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <h2>基本設定</h2>
 <div class="notice">入社日から付与日を自動計算できます。一般的な法定付与を基準にしています。</div>
 <div class="row form-row">
-<div class="field"><label for="join">入社日</label><input id="join" type="date"></div>
+<div class="field"><label for="join">入社日</label><input id="join" type="date"><div id="joinWeekday" class="small" style="margin-top:4px"></div></div>
 <div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10"></div>
 </div>
 <div class="row">
@@ -69,11 +69,16 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <section class="card">
 <h2>有給を登録</h2>
 <div class="row form-row">
-<div class="field"><label for="useDate">使用日</label><input id="useDate" type="date"></div>
+<div class="field"><label for="useDate">使用日</label><input id="useDate" type="date"><div id="useWeekday" class="small" style="margin-top:4px"></div></div>
 <div class="field"><label for="useDays">使用日数</label><input id="useDays" type="number" min="0.5" step="0.5" value="1"></div>
 </div>
 <label for="memo">メモ（任意）</label><input id="memo" placeholder="例：私用、通院など">
 <div class="actions"><button class="primary" onclick="addLeave()">登録する</button><button onclick="bulkOpen()">一括登録</button></div>
+</section>
+
+<section class="card">
+<h2>年5日取得義務</h2>
+<div id="fiveDayDuty" class="notice">入社日・付与日数を設定すると、年5日取得義務の状況を表示します。</div>
 </section>
 
 <section class="card" id="bulkCard" style="display:none">
@@ -375,6 +380,52 @@ function renderYearSummary(){
   }).join("");
 }
 
+function updateWeekdays(){
+  const join=document.getElementById("join").value;
+  const use=document.getElementById("useDate").value;
+  document.getElementById("joinWeekday").textContent=validDate(join)?`（${weekdayJa(join)}曜日）`:"";
+  document.getElementById("useWeekday").textContent=validDate(use)?`（${weekdayJa(use)}曜日）`:"";
+}
+
+function addYearsDate(s, years){
+  const d=parseDate(s);
+  const r=new Date(d.getFullYear()+years,d.getMonth(),d.getDate());
+  if(r.getMonth()!==d.getMonth()) r.setDate(0);
+  return r;
+}
+
+function fiveDayDutyInfo(){
+  const join=data.settings.join, grant=Number(data.settings.baseDays)||0;
+  if(!validDate(join)||grant<10) return null;
+  // 法定の年5日取得義務は「10日以上の年休が付与された労働者」が対象。
+  // このアプリでは入社日を基準に、現在の付与日を対象期間として表示する。
+  const today=new Date();
+  let start=null;
+  const j=parseDate(join);
+  let years=today.getFullYear()-j.getFullYear();
+  start=addYearsDate(join,Math.max(0,years));
+  if(start>today) start=addYearsDate(join,Math.max(0,years-1));
+  const end=addYearsDate(start.toISOString().slice(0,10),1);
+  end.setDate(end.getDate()-1);
+  const sk=start.toISOString().slice(0,10);
+  const ek=end.toISOString().slice(0,10);
+  const used=data.leaves.filter(x=>x.date>=sk&&x.date<=ek).reduce((a,x)=>a+(Number(x.days)||0),0);
+  const required=Math.min(5,used);
+  const remain=Math.max(0,5-used);
+  const daysLeft=Math.ceil((end-new Date(today.getFullYear(),today.getMonth(),today.getDate()))/86400000);
+  return {start:sk,end:ek,used,remain,daysLeft};
+}
+
+function renderFiveDayDuty(){
+  const el=document.getElementById("fiveDayDuty"), info=fiveDayDutyInfo();
+  if(!info){
+    el.textContent="年5日取得義務の対象になるには、原則として年10日以上の年次有給休暇が付与されている必要があります。";
+    return;
+  }
+  const status=info.remain===0?"必要な5日分を取得済みです。":(info.daysLeft<=30?`あと${fmt(info.remain)}日必要です。期間終了まで${info.daysLeft}日なので、早めの取得をおすすめします。`:`あと${fmt(info.remain)}日必要です。`);
+  el.innerHTML=`対象期間：${info.start.replaceAll("-","/")}（${weekdayJa(info.start)}）～${info.end.replaceAll("-","/")}（${weekdayJa(info.end)}）<br>この期間の取得実績：<b>${fmt(info.used)}日</b> / 5日<br>${status}<div class="small" style="margin-top:6px">※実際の法的な基準は各付与日・基準日によって決まります。会社の指定休暇等がある場合は勤務先の管理を優先してください。</div>`;
+}
+
 function render(){
   const y=currentYear(),info=yearInfo(y);
   const rate=info.total?Math.min(100,info.used/info.total*100):0;
@@ -390,7 +441,7 @@ function render(){
   document.getElementById("carryIn").value=fmt(data.settings.carryIn||0);
   document.getElementById("carryLimit").value=data.settings.carryLimit??40;
 
-  renderCalendar();renderHistory();renderYearSummary();
+  renderCalendar();renderHistory();renderYearSummary();updateWeekdays();renderFiveDayDuty();
 }
 
 function exportData(){
@@ -420,6 +471,8 @@ function importData(e){
 }
 
 document.getElementById("useDate").value=todayKey();
+document.getElementById("join").addEventListener("change",updateWeekdays);
+document.getElementById("useDate").addEventListener("change",updateWeekdays);
 render();
 </script></script>
 </body>

@@ -19,6 +19,25 @@ h2{font-size:18px;margin:0 0 13px}h3{font-size:16px;margin:14px 0 8px}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat{background:#f7f9fc;border-radius:13px;padding:13px}
 .stat b{display:block;font-size:25px;margin-top:3px}.label{font-size:13px;color:#64748b}
 .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.form-row{gap:14px}.grow{flex:1}
+ /* スマホでも2つのフォームを同じ幅で表示 */
+@media(max-width:599px){
+  .row{
+    gap:10px;
+    flex-wrap:nowrap;
+  }
+
+  .row .field{
+    min-width:0;
+    flex:1 1 0;
+    width:0;
+  }
+
+  .row .field input,
+  .row .field select{
+    width:100%;
+    box-sizing:border-box;
+  }
+}
 input,select,button{font:inherit;border-radius:10px;border:1px solid #d6deea;min-height:44px;padding:9px 11px}
 input,select{width:100%;background:white}button{cursor:pointer;background:white;font-weight:600}
 button.primary{background:#2563eb;color:#fff;border-color:#2563eb}.danger{color:#dc2626;border-color:#fecaca}

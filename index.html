@@ -4,10 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2563eb">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>有給管理アプリ</title>
-<link rel="manifest" href="manifest.json">
 <style>
 :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;color:#172033;background:#f4f7fb}
 *{box-sizing:border-box}body{margin:0;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);font-size:16px}
@@ -15,7 +12,7 @@ header{background:#2563eb;color:white;padding:18px 16px 20px;position:sticky;top
 h1{font-size:22px;margin:0 0 4px}.sub{opacity:.9;font-size:13px}
 main{max-width:760px;margin:auto;padding:14px}
 .card{background:white;border-radius:16px;padding:16px;margin:0 0 14px;box-shadow:0 2px 10px #0000000d}
-h2{font-size:18px;margin:0 0 13px}h3{font-size:16px;margin:14px 0 8px}
+h2{font-size:18px;margin:0 0 13px}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat{background:#f7f9fc;border-radius:13px;padding:13px}
 .stat b{display:block;font-size:25px;margin-top:3px}.label{font-size:13px;color:#64748b}
 .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.form-row{gap:14px}.grow{flex:1}
@@ -35,34 +32,11 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 .empty{text-align:center;color:#94a3b8;padding:16px}.small{font-size:12px;color:#64748b}
 footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 
-/* iPhone/スマホ向けレイアウト調整 */
 @media(max-width:599px){
-  .row {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 8px !important;
-    flex-wrap: nowrap !important;
-    align-items: flex-end;
-  }
-  .row .field {
-    flex: 1 1 0% !important;
-    min-width: 0 !important;
-    width: 0 !important;
-  }
-  input, select {
-    width: 100% !important;
-    box-sizing: border-box !important;
-    min-width: 0 !important;
-    -webkit-appearance: none;
-    font-size: 13px;
-    padding: 9px 6px;
-  }
-  .row label {
-    margin-top: 0;
-    margin-bottom: 5px;
-    font-size: 12px;
-    white-space: nowrap;
-  }
+  .row { display: flex !important; flex-direction: row !important; gap: 8px !important; flex-wrap: nowrap !important; align-items: flex-end; }
+  .row .field { flex: 1 1 0% !important; min-width: 0 !important; width: 0 !important; }
+  input, select { width: 100% !important; box-sizing: border-box !important; min-width: 0 !important; -webkit-appearance: none; font-size: 13px; padding: 9px 6px; }
+  .row label { margin-top: 0; margin-bottom: 5px; font-size: 12px; white-space: nowrap; }
 }
 @media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
@@ -74,23 +48,23 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <h2>現在の状況</h2>
 <div class="grid">
 <div class="stat"><span class="label">残日数</span><b id="remain">0日</b></div>
-<div class="stat"><span class="label">付与日数</span><b id="grant">0日</b></div>
+<div class="stat"><span class="label">今年の付与数</span><b id="grant">0日</b></div>
 <div class="stat"><span class="label">今月使用</span><b id="monthUsed">0日</b></div>
-<div class="stat"><span class="label">繰越</span><b id="carry">0日</b></div>
+<div class="stat"><span class="label">前年からの繰越</span><b id="carry">0日</b></div>
 </div>
-<div style="margin-top:14px"><div class="row"><span class="label">有給使用率</span><span class="grow"></span><span id="rate" class="small">0%</span></div><div class="bar"><i id="rateBar" style="width:0%"></i></div></div>
+<div style="margin-top:14px"><div class="row"><span class="label">有給消化率</span><span class="grow"></span><span id="rate" class="small">0%</span></div><div class="bar"><i id="rateBar" style="width:0%"></i></div></div>
 </section>
 
 <section class="card">
 <h2>基本設定</h2>
-<div class="notice">入社日から付与日と繰越日数を自動計算できます。</div>
+<div class="notice">「今年の付与日数」と「前年度からの繰越」を入力して「設定を保存」を押してください。</div>
 <div class="row form-row">
 <div class="field"><label for="join">入社日</label><input id="join" type="date"></div>
-<div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10"></div>
+<div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10" oninput="saveSettings()"></div>
 </div>
 <div class="row" style="margin-top:10px">
-<div class="field"><label for="carryIn">前年度からの繰越</label><input id="carryIn" type="number" min="0" max="40" step="0.5" value="0"></div>
-<div class="field"><label for="carryLimit">繰越上限</label><input id="carryLimit" type="number" min="0" max="40" step="0.5" value="40"></div>
+<div class="field"><label for="carryIn">前年度からの繰越</label><input id="carryIn" type="number" min="0" max="40" step="0.5" value="0" oninput="saveSettings()"></div>
+<div class="field"><label for="carryLimit">繰越上限</label><input id="carryLimit" type="number" min="0" max="40" step="0.5" value="40" oninput="saveSettings()"></div>
 </div>
 <div class="actions"><button class="primary" onclick="saveSettings()">設定を保存</button><button onclick="autoGrant()">付与日数を自動計算</button></div>
 </section>
@@ -132,49 +106,15 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 
 <section class="card">
 <h2>データ管理</h2>
-<div class="small">端末内（SafariのlocalStorage）に保存します。機種変更やSafariのデータ削除前はバックアップしてください。</div>
+<div class="small">端末内に保存されます。</div>
 <div class="actions"><button onclick="exportData()">バックアップを書き出す</button><label style="margin:0"><button onclick="document.getElementById('importFile').click()">バックアップを復元</button><input id="importFile" type="file" accept="application/json" style="display:none" onchange="importData(event)"></label></div>
 </section>
-<footer>有給管理アプリ / Safari対応・レスポンシブ対応</footer>
+<footer>有給管理アプリ</footer>
 </main>
 
 <script>
-const KEY = "leaveAppDataV2";
-let data = JSON.parse(localStorage.getItem(KEY) || '{"settings":{"join":"","baseDays":0,"carryIn":0,"carryLimit":40},"leaves":[]}');
-let view = new Date(); view.setDate(1);
-
-function save() {
-  localStorage.setItem(KEY, JSON.stringify(data));
-}
-
-function fmt(n) {
-  return Number.isInteger(n) ? String(n) : Number(n).toFixed(1).replace(/\.0$/, '');
-}
-
-function parseDate(s) {
-  if (!s) return new Date();
-  const parts = s.split("-");
-  if (parts.length === 3) {
-    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-  }
-  return new Date(s);
-}
-
-function getDayOfWeek(dStr) {
-  const d = parseDate(dStr);
-  if (isNaN(d.getTime())) return "";
-  const days = ["日", "月", "火", "水", "木", "金", "土"];
-  return days[d.getDay()];
-}
-
-function dateKey(d) {
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-}
-
-function todayKey() {
-  return dateKey(new Date());<script>
-const KEY = "leaveAppDataV2";
-let data = JSON.parse(localStorage.getItem(KEY) || '{"settings":{"join":"","baseDays":0,"carryIn":0,"carryLimit":40},"leaves":[]}');
+const KEY = "leaveAppDataV3"; // キーを更新して初期化トラブルを予防
+let data = JSON.parse(localStorage.getItem(KEY) || '{"settings":{"join":"","baseDays":10,"carryIn":0,"carryLimit":40},"leaves":[]}');
 let view = new Date(); view.setDate(1);
 
 function save() {
@@ -213,8 +153,7 @@ function currentYear() {
   return new Date().getFullYear();
 }
 
-// 勤続年数に応じた日本の法定付与日数テーブルを取得
-// 0.5年:10日, 1.5年:11日, 2.5年:12日, 3.5年:14日, 4.5年:16日, 5.5年:18日, 6.5年以上:20日
+// 法定付与日数の取得
 function getLegalGrantDays(years) {
   if (years < 0.5) return 0;
   if (years < 1.5) return 10;
@@ -226,7 +165,7 @@ function getLegalGrantDays(years) {
   return 20;
 }
 
-// 付与日数と前年度繰越の自動計算
+// 入社日から「今年の付与日数」を自動計算（繰越数は手動入力値をそのまま保持）
 function autoGrant() {
   const joinVal = document.getElementById("join").value;
   if (!joinVal) {
@@ -240,44 +179,23 @@ function autoGrant() {
   }
 
   const now = new Date();
-  // 入社日からの通算経過年数
   const diffTime = Math.abs(now - j);
   const years = diffTime / (1000 * 60 * 60 * 24 * 365.25);
-
-  // 今年の付与日数
   const grantDays = getLegalGrantDays(years);
 
-  // 前年度の付与日数
-  const lastYearGrantDays = getLegalGrantDays(Math.max(0, years - 1));
-
-  // 前年度の使用日数（前年の1月1日〜12月31日）
-  const lastYear = now.getFullYear() - 1;
-  const lastYearUsed = data.leaves
-    .filter(x => parseDate(x.date).getFullYear() === lastYear)
-    .reduce((a, x) => a + Number(x.days), 0);
-
-  // 前年度の未消化分（繰越日数） ＝ 前年度付与数 − 前年度使用数
-  const estimatedCarry = Math.max(0, lastYearGrantDays - lastYearUsed);
-  const carryLimit = Number(document.getElementById("carryLimit").value) || 40;
-  const finalCarry = Math.min(estimatedCarry, carryLimit);
-
-  // フォームおよび内部データへセット
   document.getElementById("baseDays").value = grantDays;
-  document.getElementById("carryIn").value = finalCarry;
-
   data.settings.join = joinVal;
   data.settings.baseDays = grantDays;
-  data.settings.carryIn = finalCarry;
 
   saveSettings();
-  alert(`【自動計算結果】\n今年の付与日数: ${grantDays}日\n前年度からの繰越: ${finalCarry}日`);
+  alert(`勤続年数に応じて「今年の付与日数 (${grantDays}日)」を自動セットしました。`);
 }
 
 function saveSettings() {
   data.settings.join = document.getElementById("join").value;
-  data.settings.baseDays = Math.max(0, Number(document.getElementById("baseDays").value) || 0);
-  data.settings.carryIn = Math.min(40, Math.max(0, Number(document.getElementById("carryIn").value) || 0));
-  data.settings.carryLimit = Math.min(40, Math.max(0, Number(document.getElementById("carryLimit").value) || 40));
+  data.settings.baseDays = Number(document.getElementById("baseDays").value) || 0;
+  data.settings.carryIn = Number(document.getElementById("carryIn").value) || 0;
+  data.settings.carryLimit = Number(document.getElementById("carryLimit").value) || 40;
   save();
   render();
 }
@@ -404,8 +322,11 @@ function renderYearSummary() {
   });
   const years = Array.from(yearSet).sort((a, b) => b - a);
 
-  const effectiveCarry = Math.min(Number(data.settings.carryIn) || 0, Number(data.settings.carryLimit) || 40);
-  const totalAvailable = (Number(data.settings.baseDays) || 0) + effectiveCarry;
+  const baseDays = Number(data.settings.baseDays) || 0;
+  const carryIn = Number(data.settings.carryIn) || 0;
+  const carryLimit = Number(data.settings.carryLimit) || 40;
+  const effectiveCarry = Math.min(carryIn, carryLimit);
+  const totalAvailable = baseDays + effectiveCarry;
 
   document.getElementById("yearSummary").innerHTML = years.map(y => {
     let used = data.leaves.filter(x => parseDate(x.date).getFullYear() === y).reduce((a, x) => a + Number(x.days), 0);
@@ -418,30 +339,30 @@ function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// 画面表示・残日数計算処理
+// 画面表示および【残日数】の厳格計算ロジック
 function render() {
   const s = data.settings;
-  const baseDays = Number(s.baseDays) || 0;
-  const carryIn = Number(s.carryIn) || 0;
-  const carryLimit = Number(s.carryLimit) ?? 40;
-  
-  // 有効な繰越数
+  const baseDays = Number(s.baseDays) || 0;       // 今年の付与数 (例: 10)
+  const carryIn = Number(s.carryIn) || 0;         // 前年からの繰越 (例: 7)
+  const carryLimit = Number(s.carryLimit) || 40;  // 上限
+
   const effectiveCarry = Math.min(carryIn, carryLimit);
 
-  // 当年の使用日数
+  // 今年の使用日数を合計 (例: 3日使用)
   const thisYear = currentYear();
   const currentYearUsed = data.leaves
     .filter(x => parseDate(x.date).getFullYear() === thisYear)
     .reduce((a, x) => a + Number(x.days), 0);
 
-  // 【残日数の基本式】 = 今年の付与数 + 繰越数 - 今年の使用数
+  // 【残日数の絶対計算式】
+  // 残日数 = 今年の付与数(10) + 前年繰越(7) - 今年使った数(3) = 14日
   const totalAvailable = baseDays + effectiveCarry;
   const remain = Math.max(0, totalAvailable - currentYearUsed);
 
-  // 使用率
+  // 消化率
   const rate = totalAvailable > 0 ? Math.min(100, (currentYearUsed / totalAvailable) * 100) : 0;
 
-  // 上部表示カードへの反映
+  // 上部カードの数字を更新
   document.getElementById("remain").textContent = fmt(remain) + "日";
   document.getElementById("grant").textContent = fmt(baseDays) + "日";
   document.getElementById("monthUsed").textContent = fmt(monthUsed()) + "日";
@@ -449,10 +370,10 @@ function render() {
   document.getElementById("rate").textContent = Math.round(rate) + "%";
   document.getElementById("rateBar").style.width = rate + "%";
 
-  // フォーム上の入力欄へ数値をセット
+  // フォーム値を入力欄に維持
   document.getElementById("join").value = s.join || "";
-  document.getElementById("baseDays").value = s.baseDays || "";
-  document.getElementById("carryIn").value = s.carryIn || 0;
+  document.getElementById("baseDays").value = s.baseDays ?? 10;
+  document.getElementById("carryIn").value = s.carryIn ?? 0;
   document.getElementById("carryLimit").value = s.carryLimit ?? 40;
 
   renderCalendar();
@@ -460,36 +381,7 @@ function render() {
   renderYearSummary();
 }
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "有給管理バックアップ.json";
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function importData(e) {
-  const f = e.target.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    try {
-      const x = JSON.parse(r.result);
-      if (!x.settings || !Array.isArray(x.leaves)) throw 0;
-      data = x;
-      save();
-      render();
-      alert("復元しました。");
-    } catch {
-      alert("バックアップファイルを読み込めませんでした。");
-    }
-  };
-  r.readAsText(f);
-  e.target.value = "";
-}
-
-// 初期実行
+// 初期化と初回実行
 document.getElementById("useDate").value = todayKey();
 render();
 </script>

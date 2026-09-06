@@ -81,6 +81,11 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <div id="fiveDayDuty" class="notice">入社日・付与日数を設定すると、年5日取得義務の状況を表示します。</div>
 </section>
 
+<section class="card">
+<h2>年5日取得義務</h2>
+<div id="obligationStatus"></div>
+</section>
+
 <section class="card" id="bulkCard" style="display:none">
 <h2>一括登録</h2>
 <div class="small">日付をカンマ・改行区切りで入力できます。例：2026/09/10, 2026/09/11</div>
@@ -112,8 +117,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <footer>有給管理アプリ / Safari対応・レスポンシブ対応</footer>
 </main>
 <script>
-const KEY="leaveAppDataV4";
-
+const KEY="leaveAppDataV5";
 const DEFAULT_DATA={
   settings:{join:"",baseDays:0,carryIn:0,carryLimit:40},
   grants:[],
@@ -123,7 +127,7 @@ const DEFAULT_DATA={
 function loadData(){
   try{
     const raw=JSON.parse(localStorage.getItem(KEY)||"null");
-    if(raw && raw.settings && Array.isArray(raw.leaves)){
+    if(raw&&raw.settings&&Array.isArray(raw.leaves)){
       raw.grants=Array.isArray(raw.grants)?raw.grants:[];
       return raw;
     }
@@ -134,136 +138,176 @@ let data=loadData();
 let view=new Date(); view.setDate(1);
 
 function save(){localStorage.setItem(KEY,JSON.stringify(data));}
-function fmt(n){n=Number(n)||0;return Number.isInteger(n)?String(n):Number(n).toFixed(1).replace(/\.0$/,'');}
+function fmt(n){
+  n=Number(n)||0;
+  return Number.isInteger(n)?String(n):Number(n).toFixed(1).replace(/\.0$/,'');
+}
 function parseDate(s){return new Date(s+"T00:00:00");}
-function dateKey(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function dateKey(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
 function todayKey(){return dateKey(new Date());}
 function currentYear(){return new Date().getFullYear();}
+
 function weekdayJP(s){
-  if(!s) return "";
-  const d=parseDate(s), w=["日","月","火","水","木","金","土"];
-  return w[d.getDay()]+"曜日";
+  if(!s)return "";
+  return ["日","月","火","水","木","金","土"][parseDate(s).getDay()]+"曜日";
 }
 function displayDate(s){
-  if(!s)return "";
-  return s.replaceAll("-","/")+"（"+weekdayJP(s)+"）";
+  return s ? s.replaceAll("-","/")+"（"+weekdayJP(s)+"）" : "";
 }
 function addYearsClamped(date,years){
   const d=new Date(date.getFullYear()+years,date.getMonth(),date.getDate());
-  // Handles leap-day safely.
-  if(d.getMonth()!==date.getMonth()){
-    d.setDate(0);
-  }
+  if(d.getMonth()!==date.getMonth())d.setDate(0);
   return d;
 }
-function nextGrantDate(grantDate){
-  return addYearsClamped(parseDate(grantDate),1);
+function nextGrantDate(dateOrString){
+  const d=typeof dateOrString==="string"?parseDate(dateOrString):dateOrString;
+  return addYearsClamped(d,1);
 }
 function grantEndDate(grantDate){
-  const end=nextGrantDate(grantDate);
-  end.setDate(end.getDate()-1);
-  return end;
+  const d=nextGrantDate(grantDate);
+  d.setDate(d.getDate()-1);
+  return d;
 }
 function inPeriod(date,grantDate){
-  const d=parseDate(date), start=parseDate(grantDate), end=grantEndDate(grantDate);
-  return d>=start && d<=end;
+  const d=parseDate(date);
+  return d>=parseDate(grantDate)&&d<=grantEndDate(grantDate);
 }
 function leaveTotalInPeriod(grantDate){
   return data.leaves.filter(x=>inPeriod(x.date,grantDate))
     .reduce((a,x)=>a+Number(x.days||0),0);
 }
-function sortGrants(){
-  data.grants.sort((a,b)=>a.date.localeCompare(b.date));
-}
+
+/*
+ * Excel方式:
+ * 付与日を基準に1年間を1つの管理期間とする。
+ * 各付与の残日数 = 当該付与日数 + 前回期間の残日数 - 当該期間の取得日数
+ * 次年度の繰越 = 前年度の残日数（上限40日）
+ */
 function ensureGrantHistory(){
-  /*
-   * Grant history is generated from the employee's hire date and current settings.
-   * Existing manually stored grant records are preserved.
-   */
   const s=data.settings;
-  if(!s.join || !Number(s.baseDays)) return;
+  if(!s.join)return;
 
   const join=parseDate(s.join);
-  let first=new Date(join);
+  const first=new Date(join);
   first.setMonth(first.getMonth()+6);
 
   const now=new Date();
-  // Keep grant records through the current year and one future cycle.
   const targetYear=now.getFullYear()+1;
 
-  let existing={};
-  data.grants.forEach(g=>existing[g.date]=g);
+  const oldByDate={};
+  data.grants.forEach(g=>{
+    if(g&&g.date)oldByDate[g.date]=g;
+  });
 
+  const table=[10,11,12,14,16,18,20];
+  const generated=[];
   let d=new Date(first);
-  let idx=0;
-  while(d.getFullYear()<=targetYear && idx<30){
+  let count=0;
+
+  while(d.getFullYear()<=targetYear&&count<30){
     const k=dateKey(d);
-    if(!existing[k]){
-      const years=Math.max(0, d.getFullYear()-first.getFullYear());
-      // For the first grant use baseDays; subsequent grants use the statutory
-      // table when baseDays was auto-calculated, otherwise preserve baseDays.
-      let days=Number(s.baseDays)||0;
-      existing[k]={date:k,days:days};
-    }
-    d=nextGrantDate(k);
-    idx++;
+
+    // 法定付与日数を基準にする。既存データの「days」も尊重する。
+    const days=oldByDate[k]&&Number(oldByDate[k].days)>0
+      ?Number(oldByDate[k].days)
+      :table[Math.min(count,table.length-1)];
+
+    generated.push({date:k,days});
+    d=nextGrantDate(d);
+    count++;
   }
 
-  data.grants=Object.values(existing).sort((a,b)=>a.date.localeCompare(b.date));
+  // 手動で存在していた付与履歴も失わない
+  Object.keys(oldByDate).forEach(k=>{
+    if(!generated.some(g=>g.date===k))generated.push(oldByDate[k]);
+  });
+
+  data.grants=generated.sort((a,b)=>a.date.localeCompare(b.date));
 }
-function getGrantForDate(date){
-  const candidates=data.grants.filter(g=>parseDate(g.date)<=parseDate(date));
-  return candidates.length?candidates[candidates.length-1]:null;
-}
-function getGrantByDate(date){return data.grants.find(g=>g.date===date)||null;}
 
 function calculateGrantRows(){
   ensureGrantHistory();
-  sortGrants();
 
-  let previousCarry=0;
-  return data.grants.map((g,i)=>{
+  const limit=Math.min(40,Math.max(0,Number(data.settings.carryLimit)||40));
+  let previousRemain=0;
+
+  return data.grants.map((g,index)=>{
     const grant=Number(g.days)||0;
-    const carry=Math.min(previousCarry,Number(data.settings.carryLimit)||40);
+    const carry=index===0?0:Math.min(previousRemain,limit);
     const total=grant+carry;
     const used=leaveTotalInPeriod(g.date);
     const remain=Math.max(0,total-used);
 
-    // Excel-style "義務残": if this grant is 10 days or more,
-    // 5 days must be acquired during the one-year period.
+    // 年10日以上付与された場合のみ、基準日から1年間の5日取得義務対象
     const obligationApplicable=grant>=10;
-    const obligationUsed=Math.min(5,used);
+    const obligationUsed=obligationApplicable?Math.min(5,used):0;
     const obligationRemain=obligationApplicable?Math.max(0,5-obligationUsed):0;
-    const obligationStatus=!obligationApplicable?"対象外":obligationRemain===0?"終了":"未達成";
 
     const row={
-      date:g.date, grant, carry, total, used, remain,
-      obligationApplicable, obligationUsed, obligationRemain, obligationStatus,
-      periodStart:g.date, periodEnd:dateKey(grantEndDate(g.date))
+      date:g.date,
+      grant,
+      carry,
+      total,
+      used,
+      remain,
+      periodStart:g.date,
+      periodEnd:dateKey(grantEndDate(g.date)),
+      obligationApplicable,
+      obligationUsed,
+      obligationRemain,
+      obligationStatus:!obligationApplicable?"対象外":obligationRemain===0?"達成":"未達成"
     };
-    previousCarry=remain;
+
+    previousRemain=remain;
     return row;
   });
 }
+
 function getCurrentGrantRow(date=todayKey()){
   const rows=calculateGrantRows();
-  let row=null;
-  rows.forEach(r=>{if(parseDate(r.date)<=parseDate(date))row=r;});
-  return row || null;
+  let current=null;
+  rows.forEach(r=>{
+    if(parseDate(r.date)<=parseDate(date))current=r;
+  });
+  return current;
+}
+function getGrantForDate(date){
+  const rows=calculateGrantRows();
+  let current=null;
+  rows.forEach(r=>{
+    if(parseDate(r.date)<=parseDate(date))current=r;
+  });
+  return current;
 }
 
 function autoGrant(){
-  const s=data.settings, j=s.join?parseDate(s.join):null;
-  if(!j){alert("先に入社日を入力してください。");return}
+  const s=data.settings;
+  if(!s.join){
+    alert("先に入社日を入力してください。");
+    return;
+  }
 
+  const j=parseDate(s.join);
   const now=new Date();
-  let years=now.getFullYear()-j.getFullYear()-
-    ((now.getMonth()<j.getMonth() || (now.getMonth()===j.getMonth()&&now.getDate()<j.getDate()))?1:0);
+  const years=now.getFullYear()-j.getFullYear()-
+    ((now.getMonth()<j.getMonth()||
+      (now.getMonth()===j.getMonth()&&now.getDate()<j.getDate()))?1:0);
 
   const table=[10,11,12,14,16,18,20];
   s.baseDays=table[Math.min(Math.max(years,0),6)];
 
   document.getElementById("baseDays").value=s.baseDays;
+  ensureGrantHistory();
+
+  // 現在の付与期間の付与日数を設定値と一致させる
+  const current=getCurrentGrantRow();
+  if(current){
+    const g=data.grants.find(x=>x.date===current.date);
+    if(g)g.days=s.baseDays;
+  }
+
   saveSettings();
 }
 
@@ -273,10 +317,16 @@ function saveSettings(){
   data.settings.carryLimit=Math.min(40,Math.max(0,Number(document.getElementById("carryLimit").value)||40));
 
   ensureGrantHistory();
-  const current=getCurrentGrantRow();
-  data.settings.carryIn=current?current.carry:0;
 
-  save();render();
+  const current=getCurrentGrantRow();
+  if(current){
+    const g=data.grants.find(x=>x.date===current.date);
+    if(g)g.days=data.settings.baseDays;
+    data.settings.carryIn=current.carry;
+  }
+
+  save();
+  render();
 }
 
 function addLeave(){
@@ -289,17 +339,14 @@ function addLeave(){
     return;
   }
 
-  const grant=getGrantForDate(d);
-  if(!grant){
+  const row=getGrantForDate(d);
+  if(!row){
     alert("使用日の時点で有効な付与日がありません。先に入社日と付与日数を設定してください。");
     return;
   }
 
-  const rows=calculateGrantRows();
-  const row=rows.find(r=>r.date===grant.date);
-  const currentUsed=leaveTotalInPeriod(grant.date);
-
-  if(days>Math.max(0,row.total-currentUsed)){
+  const used=leaveTotalInPeriod(row.date);
+  if(days>Math.max(0,row.total-used)){
     alert("その付与期間の残日数を超える登録はできません。");
     return;
   }
@@ -320,29 +367,35 @@ function normalizeDate(x){
   x=x.trim().replaceAll("/","-");
   const m=x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if(!m)return null;
+
   const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
   const dt=new Date(y,mo-1,d);
   if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d)return null;
+
   return y+"-"+String(mo).padStart(2,"0")+"-"+String(d).padStart(2,"0");
 }
 function addBulk(){
   const dates=document.getElementById("bulkText").value
     .split(/[,，\n\s]+/).map(normalizeDate).filter(Boolean);
 
-  if(!dates.length){alert("日付を入力してください。");return}
+  if(!dates.length){
+    alert("日付を入力してください。");
+    return;
+  }
 
-  const rows=calculateGrantRows();
   const projected={};
+
   for(const d of dates){
-    const grant=getGrantForDate(d);
-    if(!grant){
+    const row=getGrantForDate(d);
+    if(!row){
       alert(displayDate(d)+" は有効な付与期間がありません。");
       return;
     }
-    projected[grant.date]=(projected[grant.date]||0)+1;
-    const row=rows.find(r=>r.date===grant.date);
-    const already=leaveTotalInPeriod(grant.date);
-    if(already+projected[grant.date]>row.total){
+
+    projected[row.date]=(projected[row.date]||0)+1;
+    const already=leaveTotalInPeriod(row.date);
+
+    if(already+projected[row.date]>row.total){
       alert(displayDate(d)+" を登録すると残日数を超えます。");
       return;
     }
@@ -359,12 +412,16 @@ function addBulk(){
 
 function removeLeave(i){
   if(confirm("この履歴を削除しますか？")){
-    data.leaves.splice(i,1);save();render();
+    data.leaves.splice(i,1);
+    save();
+    render();
   }
 }
 function clearAll(){
   if(confirm("すべての使用履歴を削除しますか？")){
-    data.leaves=[];save();render();
+    data.leaves=[];
+    save();
+    render();
   }
 }
 function monthUsed(){
@@ -378,6 +435,7 @@ function monthUsed(){
 function renderCalendar(){
   const y=view.getFullYear(),m=view.getMonth();
   const first=new Date(y,m,1),last=new Date(y,m+1,0);
+
   document.getElementById("calTitle").textContent=y+"年"+(m+1)+"月";
 
   let h=["日","月","火","水","木","金","土"]
@@ -388,12 +446,17 @@ function renderCalendar(){
   for(let n=1;n<=last.getDate();n++){
     const k=y+"-"+String(m+1).padStart(2,"0")+"-"+String(n).padStart(2,"0");
     const items=data.leaves.filter(x=>x.date===k);
+
     h+=`<div class="day ${k===todayKey()?"today ":""}${items.length?"used":""}">
       <b>${n}</b>${items.map(x=>`<span class="mark">休 ${fmt(x.days)}日</span>`).join("")}</div>`;
   }
+
   document.getElementById("calendar").innerHTML=h;
 }
-function moveMonth(n){view.setMonth(view.getMonth()+n);renderCalendar();}
+function moveMonth(n){
+  view.setMonth(view.getMonth()+n);
+  renderCalendar();
+}
 
 function renderHistory(){
   const years=[...new Set([
@@ -401,42 +464,90 @@ function renderHistory(){
     ...data.leaves.map(x=>parseDate(x.date).getFullYear())
   ])].sort((a,b)=>b-a);
 
-  const sel=document.getElementById("historyYear"),old=sel.value;
+  const sel=document.getElementById("historyYear");
+  const old=sel.value;
+
   sel.innerHTML=years.map(y=>`<option>${y}</option>`).join("");
   if(years.includes(Number(old)))sel.value=old;
 
   const y=Number(sel.value)||currentYear();
+
   const rows=data.leaves.map((x,i)=>({...x,i}))
     .filter(x=>parseDate(x.date).getFullYear()===y)
     .sort((a,b)=>b.date.localeCompare(a.date));
 
   document.getElementById("history").innerHTML=rows.length?
-    rows.map(x=>`<tr><td>${displayDate(x.date)}</td><td>${fmt(x.days)}日</td><td>${escapeHtml(x.memo||"")}</td><td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td></tr>`).join(""):
+    rows.map(x=>`<tr>
+      <td>${displayDate(x.date)}</td>
+      <td>${fmt(x.days)}日</td>
+      <td>${escapeHtml(x.memo||"")}</td>
+      <td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td>
+    </tr>`).join(""):
     `<tr><td colspan="4" class="empty">履歴はありません</td></tr>`;
 }
 
 function renderYearSummary(){
   const rows=calculateGrantRows();
+
   document.getElementById("yearSummary").innerHTML=rows.length?
     rows.slice().reverse().map(r=>{
       const pct=r.total?Math.min(100,r.used/r.total*100):0;
+
       return `<div style="margin:12px 0">
-        <div class="row"><b>${displayDate(r.date)} 付与</b><span class="grow"></span>${fmt(r.used)}日使用 / 残${fmt(r.remain)}日</div>
-        <div class="small">前年繰越 ${fmt(r.carry)}日 ＋ 付与 ${fmt(r.grant)}日 ＝ ${fmt(r.total)}日
+        <div class="row">
+          <b>${displayDate(r.date)} 付与</b>
+          <span class="grow"></span>
+          ${fmt(r.used)}日使用 / 残${fmt(r.remain)}日
+        </div>
+        <div class="small">
+          前年繰越 ${fmt(r.carry)}日 ＋ 付与 ${fmt(r.grant)}日 ＝ ${fmt(r.total)}日
           ｜対象期間 ${displayDate(r.periodStart)} ～ ${displayDate(r.periodEnd)}
-          ｜年5日義務：${r.obligationApplicable?(fmt(r.obligationUsed)+"日取得 / 義務残 "+fmt(r.obligationRemain)+"日（"+r.obligationStatus+"）"):"対象外"}</div>
+        </div>
         <div class="bar"><i style="width:${pct}%"></i></div>
       </div>`;
     }).join(""):
     `<div class="empty">付与履歴はありません</div>`;
 }
 
+function renderObligation(){
+  const box=document.getElementById("obligationStatus");
+  if(!box)return;
+
+  const rows=calculateGrantRows();
+  const today=todayKey();
+  const current=rows.filter(r=>parseDate(r.date)<=parseDate(today)).pop();
+
+  if(!current){
+    box.innerHTML=`<div class="small">入社日と付与日数を設定すると表示されます。</div>`;
+    return;
+  }
+
+  const target=current.obligationApplicable;
+  const status=target
+    ? (current.obligationRemain===0
+      ? `<b>達成</b>（5日以上取得済み）`
+      : `<b>あと${fmt(current.obligationRemain)}日</b>取得が必要です`)
+    : `<b>対象外</b>（この付与期間は10日未満の付与です）`;
+
+  box.innerHTML=`
+    <div class="notice">
+      <div><b>基準日：</b>${displayDate(current.date)}</div>
+      <div><b>対象期間：</b>${displayDate(current.periodStart)} ～ ${displayDate(current.periodEnd)}</div>
+      <div><b>取得実績：</b>${fmt(current.obligationUsed)}日 / 5日</div>
+      <div><b>義務残：</b>${fmt(current.obligationRemain)}日</div>
+      <div><b>状況：</b>${status}</div>
+    </div>`;
+}
+
 function escapeHtml(s){
-  return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  return s.replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
 }
 
 function render(){
   ensureGrantHistory();
+
   const row=getCurrentGrantRow();
 
   const remain=row?row.remain:0;
@@ -461,6 +572,7 @@ function render(){
   renderCalendar();
   renderHistory();
   renderYearSummary();
+  renderObligation();
 }
 
 function exportData(){
@@ -472,18 +584,28 @@ function exportData(){
   URL.revokeObjectURL(a.href);
 }
 function importData(e){
-  const f=e.target.files[0];if(!f)return;
+  const f=e.target.files[0];
+  if(!f)return;
+
   const r=new FileReader();
   r.onload=()=>{
     try{
       const x=JSON.parse(r.result);
       if(!x.settings||!Array.isArray(x.leaves))throw 0;
+
       x.grants=Array.isArray(x.grants)?x.grants:[];
-      data=x;save();render();alert("復元しました。");
-    }catch{alert("バックアップファイルを読み込めませんでした。");}
+      data=x;
+      save();
+      render();
+      alert("復元しました。");
+    }catch{
+      alert("バックアップファイルを読み込めませんでした。");
+    }
   };
-  r.readAsText(f);e.target.value="";
+  r.readAsText(f);
+  e.target.value="";
 }
+
 document.getElementById("useDate").value=todayKey();
 render();
 </script></script>

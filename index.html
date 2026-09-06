@@ -56,7 +56,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <h2>基本設定</h2>
 <div class="notice">入社日から付与日を自動計算できます。一般的な法定付与を基準にしています。</div>
 <div class="row form-row">
-<div class="field"><label for="join">入社日</label><input id="join" type="date"><div id="joinWeekday" class="small" style="margin-top:4px"></div></div>
+<div class="field"><label for="join">入社日</label><input id="join" type="date"><span id="joinWeekday" class="small"></span><div id="joinWeekday" class="small" style="margin-top:4px"></div></div>
 <div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10"></div>
 </div>
 <div class="row">
@@ -69,7 +69,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <section class="card">
 <h2>有給を登録</h2>
 <div class="row form-row">
-<div class="field"><label for="useDate">使用日</label><input id="useDate" type="date"><div id="useWeekday" class="small" style="margin-top:4px"></div></div>
+<div class="field"><label for="useDate">使用日</label><input id="useDate" type="date"><span id="useWeekday" class="small"></span><div id="useWeekday" class="small" style="margin-top:4px"></div></div>
 <div class="field"><label for="useDays">使用日数</label><input id="useDays" type="number" min="0.5" step="0.5" value="1"></div>
 </div>
 <label for="memo">メモ（任意）</label><input id="memo" placeholder="例：私用、通院など">
@@ -136,6 +136,7 @@ let view=new Date(); view.setDate(1);
 
 function save(){localStorage.setItem(KEY,JSON.stringify(data));}
 function fmt(n){n=Number(n)||0;return Number.isInteger(n)?String(n):n.toFixed(1).replace(/\.0$/,"")}
+function dateKey(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function todayKey(){let d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function parseDate(s){return new Date(s+"T00:00:00")}
 function currentYear(){return new Date().getFullYear()}
@@ -394,36 +395,77 @@ function addYearsDate(s, years){
   return r;
 }
 
-function fiveDayDutyInfo(){
-  const join=data.settings.join, grant=Number(data.settings.baseDays)||0;
-  if(!validDate(join)||grant<10) return null;
-  // 法定の年5日取得義務は「10日以上の年休が付与された労働者」が対象。
-  // このアプリでは入社日を基準に、現在の付与日を対象期間として表示する。
-  const today=new Date();
-  let start=null;
+// 入社日から法定の付与日を計算します。
+// 初回付与は入社6か月後、その後は1年ごとです。
+function statutoryGrantDate(join, serviceYears){
   const j=parseDate(join);
-  let years=today.getFullYear()-j.getFullYear();
-  start=addYearsDate(join,Math.max(0,years));
-  if(start>today) start=addYearsDate(join,Math.max(0,years-1));
-  const end=addYearsDate(start.toISOString().slice(0,10),1);
-  end.setDate(end.getDate()-1);
-  const sk=start.toISOString().slice(0,10);
-  const ek=end.toISOString().slice(0,10);
-  const used=data.leaves.filter(x=>x.date>=sk&&x.date<=ek).reduce((a,x)=>a+(Number(x.days)||0),0);
-  const required=Math.min(5,used);
+  if(!validDate(join)) return null;
+  if(serviceYears===0){
+    const d=new Date(j.getFullYear(),j.getMonth()+6,j.getDate());
+    return d;
+  }
+  const d=new Date(j.getFullYear()+serviceYears+1,j.getMonth()+6,j.getDate());
+  return d;
+}
+
+function grantDaysByServiceYears(serviceYears){
+  const table=[10,11,12,14,16,18,20];
+  return table[Math.min(Math.max(serviceYears,0),6)];
+}
+
+// 現在日を基準に、直近の「10日以上付与された基準日」を求めます。
+function latestStatutoryGrant(){
+  const join=data.settings.join;
+  if(!validDate(join)) return null;
+  const today=new Date();
+  let latest=null;
+  for(let years=0;years<=20;years++){
+    const d=statutoryGrantDate(join,years);
+    if(!d) continue;
+    if(d<=today){
+      latest={date:d,days:grantDaysByServiceYears(years),serviceYears:years};
+    }else{
+      break;
+    }
+  }
+  return latest;
+}
+
+function fiveDayDutyInfo(){
+  const latest=latestStatutoryGrant();
+  if(!latest || latest.days<10) return null;
+
+  // 年5日取得義務の対象期間は「付与された基準日から1年間」。
+  // 暦年や入社日から1年間ではありません。
+  const startDate=new Date(latest.date);
+  const endDate=new Date(latest.date.getFullYear()+1,latest.date.getMonth(),latest.date.getDate()-1);
+  const sk=dateKey(startDate);
+  const ek=dateKey(endDate);
+
+  // 対象期間内の実際の取得日だけをカウントします。
+  // 今年の年度集計値や繰越値はここには加算しません。
+  const used=data.leaves
+    .filter(x=>validDate(x.date) && x.date>=sk && x.date<=ek)
+    .reduce((a,x)=>a+(Number(x.days)||0),0);
+
   const remain=Math.max(0,5-used);
-  const daysLeft=Math.ceil((end-new Date(today.getFullYear(),today.getMonth(),today.getDate()))/86400000);
-  return {start:sk,end:ek,used,remain,daysLeft};
+  const today=new Date(todayKey()+"T00:00:00");
+  const daysLeft=Math.max(0,Math.ceil((endDate-today)/86400000));
+  return {start:sk,end:ek,used,remain,daysLeft,grant:latest.days};
 }
 
 function renderFiveDayDuty(){
   const el=document.getElementById("fiveDayDuty"), info=fiveDayDutyInfo();
   if(!info){
-    el.textContent="年5日取得義務の対象になるには、原則として年10日以上の年次有給休暇が付与されている必要があります。";
+    el.textContent="年5日取得義務の対象になる付与（原則10日以上）が確認できません。";
     return;
   }
-  const status=info.remain===0?"必要な5日分を取得済みです。":(info.daysLeft<=30?`あと${fmt(info.remain)}日必要です。期間終了まで${info.daysLeft}日なので、早めの取得をおすすめします。`:`あと${fmt(info.remain)}日必要です。`);
-  el.innerHTML=`対象期間：${info.start.replaceAll("-","/")}（${weekdayJa(info.start)}）～${info.end.replaceAll("-","/")}（${weekdayJa(info.end)}）<br>この期間の取得実績：<b>${fmt(info.used)}日</b> / 5日<br>${status}<div class="small" style="margin-top:6px">※実際の法的な基準は各付与日・基準日によって決まります。会社の指定休暇等がある場合は勤務先の管理を優先してください。</div>`;
+  const status=info.remain===0
+    ?"必要な5日分を取得済みです。"
+    :(info.daysLeft<=30
+      ?`あと${fmt(info.remain)}日必要です。期間終了まで${info.daysLeft}日なので、早めの取得をおすすめします。`
+      :`あと${fmt(info.remain)}日必要です。`);
+  el.innerHTML=`基準日：${info.start.replaceAll("-","/")}（${weekdayJa(info.start)}）<br>対象期間：${info.start.replaceAll("-","/")}（${weekdayJa(info.start)}）～${info.end.replaceAll("-","/")}（${weekdayJa(info.end)}）<br>この期間の取得実績：<b>${fmt(info.used)}日</b> / 5日<br>${status}<div class="small" style="margin-top:6px">※対象期間は、10日以上の年次有給休暇が付与された基準日から1年間です。繰越残日数そのものは年5日の取得実績には加算しません。</div>`;
 }
 
 function render(){

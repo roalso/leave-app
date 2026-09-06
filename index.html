@@ -353,14 +353,19 @@ function escapeHtml(s) {
 
 function render() {
   const s = data.settings;
-  const baseDays = Number(s.baseDays) || 0;
-  const carryIn = Number(s.carryIn) || 0;
-  const carryLimit = Number(s.carryLimit) || 40;
-  const effectiveCarry = Math.min(carryIn, carryLimit);
+  const baseDays = Number(s.baseDays) || 0; // 今年の付与日数
+  const carryIn = Number(s.carryIn) || 0; // 前年度からの繰越
+  const carryLimit = Number(s.carryLimit) ?? 40; // 繰越上限
 
+  // 実際に有効な繰越日数（上限を考慮）
+  const effectiveCarry = Math.min(carryIn, carryLimit);
+ // 総保有日数 = 今年の付与日数 + 有効繰越日数
   const totalAvailable = baseDays + effectiveCarry;
+  // 累計使用日数
   const used = data.leaves.reduce((a, x) => a + Number(x.days), 0);
+  // 残日数 = 総保有日数 - 使用日数
   const remain = Math.max(0, totalAvailable - used);
+  // 使用率（付与日数＋繰越日数の合計に対する消化割合）
   const rate = totalAvailable ? Math.min(100, (used / totalAvailable) * 100) : 0;
 
   document.getElementById("remain").textContent = fmt(remain) + "日";

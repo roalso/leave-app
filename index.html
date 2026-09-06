@@ -113,10 +113,6 @@ let view=new Date(); view.setDate(1);
 
 function save(){localStorage.setItem(KEY,JSON.stringify(data));}
 function fmt(n){return Number.isInteger(n)?String(n):Number(n).toFixed(1).replace(/\.0$/,'')}
-function dateKey(d){return d.toISOString().slice(0,10)}
-function todayKey(){let d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-function parseDate(s){return new Date(s+"T00:00:00")}
-function currentYear(){return new Date().getFullYear()}
 
 // iPhone (Safari) 対応の日付パース処理（ハイフン分割で安定化）
 function parseDate(s){
@@ -128,14 +124,14 @@ function parseDate(s){
   return new Date(s);
 }
 
- // 曜日文字を取得する関数を追加
+// 曜日文字を取得する関数を追加
 function getDayOfWeek(dStr) {
   const d = parseDate(dStr);
   if (isNaN(d.getTime())) return "";
   const days = ["日", "月", "火", "水", "木", "金", "土"];
   return days[d.getDay()];
 }
- 
+
 function dateKey(d){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }

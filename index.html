@@ -107,87 +107,320 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <footer>有給管理アプリ / Safari対応・レスポンシブ対応</footer>
 </main>
 <script>
-const KEY="leaveAppDataV2";
-let data=JSON.parse(localStorage.getItem(KEY)||'{"settings":{"join":"","baseDays":0,"carryIn":0,"carryLimit":40},"leaves":[]}');
+const KEY="leaveAppDataV3";
+const DEFAULT_DATA={
+  settings:{join:"",baseDays:0,carryIn:0,carryLimit:40,grantHistory:{}},
+  leaves:[]
+};
+
+function loadData(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(KEY)||"null");
+    if(!raw) return structuredClone(DEFAULT_DATA);
+    raw.settings=raw.settings||{};
+    raw.settings.join=raw.settings.join||"";
+    raw.settings.baseDays=Math.max(0,Number(raw.settings.baseDays)||0);
+    raw.settings.carryLimit=Math.min(40,Math.max(0,Number(raw.settings.carryLimit)||40));
+    raw.settings.grantHistory=raw.settings.grantHistory||{};
+    raw.leaves=Array.isArray(raw.leaves)?raw.leaves:[];
+    return raw;
+  }catch{return structuredClone(DEFAULT_DATA)}
+}
+let data=loadData();
 let view=new Date(); view.setDate(1);
 
 function save(){localStorage.setItem(KEY,JSON.stringify(data));}
-function fmt(n){return Number.isInteger(n)?String(n):Number(n).toFixed(1).replace(/\.0$/,'')}
-function dateKey(d){return d.toISOString().slice(0,10)}
+function fmt(n){n=Number(n)||0;return Number.isInteger(n)?String(n):n.toFixed(1).replace(/\.0$/,"")}
 function todayKey(){let d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function parseDate(s){return new Date(s+"T00:00:00")}
 function currentYear(){return new Date().getFullYear()}
+function validDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(parseDate(s).getTime())}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+function standardGrantForYear(y){
+  const s=data.settings,j=s.join?parseDate(s.join):null;
+  if(!j)return 0;
+  const anniversary=new Date(y,j.getMonth(),j.getDate());
+  if(anniversary>new Date(y,11,31))return 0;
+  const years=y-j.getFullYear();
+  const table=[10,11,12,14,16,18,20];
+  return table[Math.min(Math.max(years,0),6)];
+}
+
+function grantForYear(y){
+  if(y===currentYear())return Number(data.settings.baseDays)||0;
+  if(Object.prototype.hasOwnProperty.call(data.settings.grantHistory,String(y))){
+    return Math.max(0,Number(data.settings.grantHistory[y])||0);
+  }
+  return standardGrantForYear(y);
+}
+
+function usedInYear(y){
+  return data.leaves.filter(x=>parseDate(x.date).getFullYear()===y)
+    .reduce((a,x)=>a+(Number(x.days)||0),0);
+}
+
+/*
+  年度ごとの残日数を計算。
+  「前年の残日数」を翌年度へ繰り越し、繰越上限を適用する。
+  現年度については設定画面の carryIn が保存済みならそれを優先する。
+*/
+function yearInfo(y){
+  const start=data.settings.join?parseDate(data.settings.join):null;
+  if(!start||Number.isNaN(start.getTime()))return {grant:grantForYear(y),carry:0,used:usedInYear(y),remain:Math.max(0,grantForYear(y)-usedInYear(y)),total:grantForYear(y)};
+
+  const first=start.getFullYear();
+  if(y<first)return {grant:0,carry:0,used:0,remain:0,total:0};
+
+  let carry=0;
+  for(let yr=first;yr<=y;yr++){
+    const grant=grantForYear(yr);
+    const used=usedInYear(yr);
+    if(yr===first){
+      carry=0;
+    }else if(yr===currentYear() && Number(data.settings.carryIn)>0){
+      // 現年度だけは、保存済みの前年繰越を使用
+      carry=Math.min(Number(data.settings.carryIn)||0,Number(data.settings.carryLimit)||40);
+    }else{
+      // 前年度の「その年度末残」を繰り越す
+      const prevRemain=Math.max(0,grantForYear(yr-1)+carry-usedInYear(yr-1));
+      carry=Math.min(prevRemain,Number(data.settings.carryLimit)||40);
+    }
+    if(yr===y){
+      const total=grant+carry;
+      const remain=Math.max(0,total-used);
+      return {grant,carry,used,remain,total};
+    }
+  }
+  return {grant:0,carry:0,used:0,remain:0,total:0};
+}
 
 function autoGrant(){
- const s=data.settings, j=s.join?parseDate(s.join):null;
- if(!j){alert("先に入社日を入力してください。");return}
- const now=new Date(), years=now.getFullYear()-j.getFullYear()-((now.getMonth()<j.getMonth()||now.getMonth()===j.getMonth()&&now.getDate()<j.getDate())?1:0);
- const table=[10,11,12,14,16,18,20]; s.baseDays=table[Math.min(Math.max(years,0),6)];
- document.getElementById("baseDays").value=s.baseDays; saveSettings();
+  const s=data.settings,j=s.join?parseDate(s.join):null;
+  if(!j){alert("先に入社日を入力してください。");return}
+  const y=currentYear();
+  s.baseDays=standardGrantForYear(y);
+  document.getElementById("baseDays").value=s.baseDays;
+  // 現年度の前年繰越を自動計算
+  s.carryIn=calculateAutoCarry(y);
+  document.getElementById("carryIn").value=fmt(s.carryIn);
+  saveSettings(false);
+  alert("今年の付与日数と前年度からの繰越を自動計算しました。");
 }
-function saveSettings(){
- data.settings.join=document.getElementById("join").value;
- data.settings.baseDays=Math.max(0,Number(document.getElementById("baseDays").value)||0);
- data.settings.carryIn=Math.min(40,Math.max(0,Number(document.getElementById("carryIn").value)||0));
- data.settings.carryLimit=Math.min(40,Math.max(0,Number(document.getElementById("carryLimit").value)||40));
- save();render();
+
+function calculateAutoCarry(y){
+  if(y<=1)return 0;
+  const prev=yearInfo(y-1);
+  return Math.min(Math.max(0,prev.remain),Number(data.settings.carryLimit)||40);
 }
+
+function saveSettings(showAlert=true){
+  const join=document.getElementById("join").value;
+  const base=Math.max(0,Number(document.getElementById("baseDays").value)||0);
+  const limit=Math.min(40,Math.max(0,Number(document.getElementById("carryLimit").value)||40));
+
+  data.settings.join=join;
+  data.settings.baseDays=base;
+  data.settings.carryLimit=limit;
+
+  // 現年度の付与日数を履歴にも保存
+  data.settings.grantHistory[String(currentYear())]=base;
+
+  // 「自動計算」だけでなく、設定保存時にも前年繰越を更新
+  data.settings.carryIn=Math.min(calculateAutoCarry(currentYear()),limit);
+
+  save();
+  render();
+  if(showAlert)alert("設定を保存しました。前年度の残日数から繰越を自動計算しました。");
+}
+
 function addLeave(){
- const d=document.getElementById("useDate").value, days=Number(document.getElementById("useDays").value), memo=document.getElementById("memo").value.trim();
- if(!d||!days||days<0.5){alert("使用日と日数を入力してください。");return}
- const used=data.leaves.reduce((a,x)=>a+Number(x.days),0), available=data.settings.baseDays+Math.min(data.settings.carryIn,data.settings.carryLimit)-used;
- if(days>available){alert("残日数を超える登録はできません。");return}
- data.leaves.push({date:d,days,memo});data.leaves.sort((a,b)=>a.date.localeCompare(b.date));save();
- document.getElementById("memo").value="";render();
+  const d=document.getElementById("useDate").value;
+  const days=Number(document.getElementById("useDays").value);
+  const memo=document.getElementById("memo").value.trim();
+  if(!validDate(d)||!days||days<0.5){alert("使用日と日数を正しく入力してください。");return}
+
+  const y=parseDate(d).getFullYear();
+  const info=yearInfo(y);
+  if(days>info.remain){
+    alert(`${y}年度の残日数は${fmt(info.remain)}日です。これを超える登録はできません。`);
+    return;
+  }
+
+  data.leaves.push({date:d,days,memo});
+  data.leaves.sort((a,b)=>a.date.localeCompare(b.date));
+  save();
+  document.getElementById("memo").value="";
+  render();
+  alert(`${d.replaceAll("-","/")} に ${fmt(days)}日を登録しました。使用履歴にも反映されています。`);
 }
-function bulkOpen(){document.getElementById("bulkCard").style.display="block";document.getElementById("bulkText").focus()}
+
+function bulkOpen(){
+  document.getElementById("bulkCard").style.display="block";
+  document.getElementById("bulkText").focus();
+}
+
+function normalizeBulkDate(x){
+  x=x.trim().replaceAll("/","-");
+  const m=x.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(!m)return null;
+  const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
+  const s=y+"-"+String(mo).padStart(2,"0")+"-"+String(d).padStart(2,"0");
+  return validDate(s)?s:null;
+}
+
 function addBulk(){
- const dates=document.getElementById("bulkText").value.split(/[,，\n\s]+/).map(x=>x.trim()).filter(Boolean);
- if(!dates.length){alert("日付を入力してください。");return}
- const normalized=dates.map(x=>x.replaceAll("/","-")).filter(x=>/^\\d{4}-\\d{1,2}-\\d{1,2}$/.test(x)).map(x=>{let [y,m,d]=x.split("-").map(Number);return y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0")});
- let available=data.settings.baseDays+Math.min(data.settings.carryIn,data.settings.carryLimit)-data.leaves.reduce((a,x)=>a+Number(x.days),0);
- if(normalized.length>available){alert("残日数を超えるため登録できません。");return}
- normalized.forEach(d=>data.leaves.push({date:d,days:1,memo:""}));
- data.leaves.sort((a,b)=>a.date.localeCompare(b.date));save();document.getElementById("bulkText").value="";document.getElementById("bulkCard").style.display="none";render();
+  const input=document.getElementById("bulkText").value;
+  const dates=input.split(/[,，\n\s]+/).map(normalizeBulkDate).filter(Boolean);
+  if(!dates.length){alert("有効な日付を入力してください。");return}
+
+  // 同じ日付が入力された場合も、その件数分の1日として計算
+  const needByYear={};
+  dates.forEach(d=>{
+    const y=parseDate(d).getFullYear();
+    needByYear[y]=(needByYear[y]||0)+1;
+  });
+
+  for(const y of Object.keys(needByYear)){
+    const info=yearInfo(Number(y));
+    if(needByYear[y]>info.remain){
+      alert(`${y}年度の残日数は${fmt(info.remain)}日です。${needByYear[y]}日分は登録できません。`);
+      return;
+    }
+  }
+
+  dates.forEach(d=>data.leaves.push({date:d,days:1,memo:""}));
+  data.leaves.sort((a,b)=>a.date.localeCompare(b.date));
+  save();
+  document.getElementById("bulkText").value="";
+  document.getElementById("bulkCard").style.display="none";
+  render();
+  alert(`${dates.length}件を使用履歴に登録しました。`);
 }
-function removeLeave(i){if(confirm("この履歴を削除しますか？")){data.leaves.splice(i,1);save();render()}}
-function clearAll(){if(confirm("すべての使用履歴を削除しますか？")){data.leaves=[];save();render()}}
+
+function removeLeave(i){
+  if(confirm("この履歴を削除しますか？")){
+    data.leaves.splice(i,1);
+    save();render();
+  }
+}
+
+function clearAll(){
+  if(confirm("すべての使用履歴を削除しますか？")){
+    data.leaves=[];save();render();
+  }
+}
+
 function monthUsed(){
- const y=currentYear(),m=new Date().getMonth()+1;
- return data.leaves.filter(x=>{let d=parseDate(x.date);return d.getFullYear()===y&&d.getMonth()+1===m}).reduce((a,x)=>a+Number(x.days),0)
+  const y=currentYear(),m=new Date().getMonth()+1;
+  return data.leaves.filter(x=>{
+    const d=parseDate(x.date);
+    return d.getFullYear()===y&&d.getMonth()+1===m;
+  }).reduce((a,x)=>a+(Number(x.days)||0),0);
 }
+
 function renderCalendar(){
- const y=view.getFullYear(),m=view.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
- document.getElementById("calTitle").textContent=y+"年"+(m+1)+"月";
- let h=["日","月","火","水","木","金","土"].map(x=>`<div class="dow">${x}</div>`).join("");
- for(let i=0;i<first.getDay();i++)h+=`<div class="day muted"></div>`;
- for(let n=1;n<=last.getDate();n++){
-   let k=y+"-"+String(m+1).padStart(2,"0")+"-"+String(n).padStart(2,"0"), items=data.leaves.filter(x=>x.date===k);
-   h+=`<div class="day ${k===todayKey()?"today ":""}${items.length?"used":""}"><b>${n}</b>${items.map(x=>`<span class="mark">休 ${fmt(x.days)}日</span>`).join("")}</div>`;
- }
- document.getElementById("calendar").innerHTML=h;
+  const y=view.getFullYear(),m=view.getMonth(),first=new Date(y,m,1),last=new Date(y,m+1,0);
+  document.getElementById("calTitle").textContent=y+"年"+(m+1)+"月";
+  let h=["日","月","火","水","木","金","土"].map(x=>`<div class="dow">${x}</div>`).join("");
+  for(let i=0;i<first.getDay();i++)h+=`<div class="day muted"></div>`;
+  for(let n=1;n<=last.getDate();n++){
+    const k=y+"-"+String(m+1).padStart(2,"0")+"-"+String(n).padStart(2,"0");
+    const items=data.leaves.filter(x=>x.date===k);
+    h+=`<div class="day ${k===todayKey()?"today ":""}${items.length?"used":""}"><b>${n}</b>${items.map(x=>`<span class="mark">休 ${fmt(x.days)}日</span>`).join("")}</div>`;
+  }
+  document.getElementById("calendar").innerHTML=h;
 }
+
 function moveMonth(n){view.setMonth(view.getMonth()+n);renderCalendar()}
+
+function weekdayJa(s){
+  const w=["日","月","火","水","木","金","土"];
+  return w[parseDate(s).getDay()];
+}
+
 function renderHistory(){
- const ys=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])].sort((a,b)=>b-a);
- const sel=document.getElementById("historyYear"), old=sel.value;sel.innerHTML=ys.map(y=>`<option>${y}</option>`).join("");if(ys.includes(Number(old)))sel.value=old;
- const y=Number(sel.value)||currentYear(), rows=data.leaves.map((x,i)=>({...x,i})).filter(x=>parseDate(x.date).getFullYear()===y).sort((a,b)=>b.date.localeCompare(a.date));
- document.getElementById("history").innerHTML=rows.length?rows.map(x=>`<tr><td>${x.date.replaceAll("-","/")}</td><td>${fmt(x.days)}日</td><td>${escapeHtml(x.memo||"")}</td><td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td></tr>`).join(""):`<tr><td colspan="4" class="empty">履歴はありません</td></tr>`;
+  const ys=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])]
+    .sort((a,b)=>b-a);
+  const sel=document.getElementById("historyYear"),old=sel.value;
+  sel.innerHTML=ys.map(y=>`<option>${y}</option>`).join("");
+  if(ys.includes(Number(old)))sel.value=old;
+
+  const y=Number(sel.value)||currentYear();
+  const rows=data.leaves.map((x,i)=>({...x,i}))
+    .filter(x=>parseDate(x.date).getFullYear()===y)
+    .sort((a,b)=>b.date.localeCompare(a.date));
+
+  document.getElementById("history").innerHTML=rows.length?
+    rows.map(x=>`<tr><td>${x.date.replaceAll("-","/")}（${weekdayJa(x.date)}）</td><td>${fmt(x.days)}日</td><td>${escapeHtml(x.memo||"")}</td><td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td></tr>`).join(""):
+    `<tr><td colspan="4" class="empty">履歴はありません</td></tr>`;
 }
+
 function renderYearSummary(){
- const years=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])].sort((a,b)=>b-a);
- document.getElementById("yearSummary").innerHTML=years.map(y=>{let used=data.leaves.filter(x=>parseDate(x.date).getFullYear()===y).reduce((a,x)=>a+Number(x.days),0);let pct=data.settings.baseDays?Math.min(100,used/data.settings.baseDays*100):0;return `<div style="margin:12px 0"><div class="row"><b>${y}年</b><span class="grow"></span>${fmt(used)}日使用</div><div class="bar"><i style="width:${pct}%"></i></div></div>`}).join("");
+  const start=data.settings.join?parseDate(data.settings.join):null;
+  const years=[...new Set([
+    currentYear(),
+    ...(start?[...Array(Math.max(0,currentYear()-start.getFullYear()+1))].map((_,i)=>start.getFullYear()+i):[]),
+    ...data.leaves.map(x=>parseDate(x.date).getFullYear())
+  ])].sort((a,b)=>b-a);
+
+  document.getElementById("yearSummary").innerHTML=years.map(y=>{
+    const info=yearInfo(y);
+    const pct=info.total?Math.min(100,info.used/info.total*100):0;
+    return `<div style="margin:12px 0">
+      <div class="row"><b>${y}年</b><span class="grow"></span>
+      付与 ${fmt(info.grant)}日 / 繰越 ${fmt(info.carry)}日 / 使用 ${fmt(info.used)}日 / 残 ${fmt(info.remain)}日</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+    </div>`;
+  }).join("");
 }
-function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
 function render(){
- const s=data.settings, total=s.baseDays+Math.min(s.carryIn,s.carryLimit), used=data.leaves.reduce((a,x)=>a+Number(x.days),0), remain=Math.max(0,total-used), rate=total?Math.min(100,used/total*100):0;
- document.getElementById("remain").textContent=fmt(remain)+"日";document.getElementById("grant").textContent=fmt(s.baseDays)+"日";document.getElementById("monthUsed").textContent=fmt(monthUsed())+"日";document.getElementById("carry").textContent=fmt(Math.min(s.carryIn,s.carryLimit))+"日";document.getElementById("rate").textContent=Math.round(rate)+"%";document.getElementById("rateBar").style.width=rate+"%";
- document.getElementById("join").value=s.join||"";document.getElementById("baseDays").value=s.baseDays||"";document.getElementById("carryIn").value=s.carryIn||0;document.getElementById("carryLimit").value=s.carryLimit??40;
- renderCalendar();renderHistory();renderYearSummary();
+  const y=currentYear(),info=yearInfo(y);
+  const rate=info.total?Math.min(100,info.used/info.total*100):0;
+  document.getElementById("remain").textContent=fmt(info.remain)+"日";
+  document.getElementById("grant").textContent=fmt(info.grant)+"日";
+  document.getElementById("monthUsed").textContent=fmt(monthUsed())+"日";
+  document.getElementById("carry").textContent=fmt(info.carry)+"日";
+  document.getElementById("rate").textContent=Math.round(rate)+"%";
+  document.getElementById("rateBar").style.width=rate+"%";
+
+  document.getElementById("join").value=data.settings.join||"";
+  document.getElementById("baseDays").value=data.settings.baseDays||"";
+  document.getElementById("carryIn").value=fmt(data.settings.carryIn||0);
+  document.getElementById("carryLimit").value=data.settings.carryLimit??40;
+
+  renderCalendar();renderHistory();renderYearSummary();
 }
-function exportData(){const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="有給管理バックアップ.json";a.click();URL.revokeObjectURL(a.href)}
-function importData(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.settings||!Array.isArray(x.leaves))throw 0;data=x;save();render();alert("復元しました。")}catch{alert("バックアップファイルを読み込めませんでした。")}};r.readAsText(f);e.target.value=""}
-document.getElementById("useDate").value=todayKey();render();
-</script>
+
+function exportData(){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download="有給管理バックアップ.json";a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+function importData(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const x=JSON.parse(r.result);
+      if(!x.settings||!Array.isArray(x.leaves))throw 0;
+      data=x;
+      data.settings.grantHistory=data.settings.grantHistory||{};
+      data.settings.carryLimit=Math.min(40,Math.max(0,Number(data.settings.carryLimit)||40));
+      // 旧V2データも履歴を維持したまま読み込む
+      data.settings.carryIn=Math.max(0,Number(data.settings.carryIn)||0);
+      data.settings.baseDays=Math.max(0,Number(data.settings.baseDays)||0);
+      save();render();alert("復元しました。");
+    }catch{alert("バックアップファイルを読み込めませんでした。")}
+  };
+  r.readAsText(f);e.target.value="";
+}
+
+document.getElementById("useDate").value=todayKey();
+render();
+</script></script>
 </body>
 </html>

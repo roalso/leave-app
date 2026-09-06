@@ -118,44 +118,101 @@ function todayKey(){let d=new Date();return d.getFullYear()+"-"+String(d.getMont
 function parseDate(s){return new Date(s+"T00:00:00")}
 function currentYear(){return new Date().getFullYear()}
 
+// iPhone (Safari) 対応の日付パース処理（ハイフン分割で安定化）
+function parseDate(s){
+  if(!s) return new Date();
+  const parts = s.split("-");
+  if(parts.length === 3){
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+  return new Date(s);
+}
+
+ // 曜日文字を取得する関数を追加
+function getDayOfWeek(dStr) {
+  const d = parseDate(dStr);
+  if (isNaN(d.getTime())) return "";
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  return days[d.getDay()];
+}
+ 
+function dateKey(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function todayKey(){let d=new Date();return dateKey(d);}
+function currentYear(){return new Date().getFullYear()}
+
 function autoGrant(){
  const s=data.settings, j=s.join?parseDate(s.join):null;
- if(!j){alert("先に入社日を入力してください。");return}
+ if(!j || isNaN(j.getTime())){alert("先に入社日を入力してください。");return}
  const now=new Date(), years=now.getFullYear()-j.getFullYear()-((now.getMonth()<j.getMonth()||now.getMonth()===j.getMonth()&&now.getDate()<j.getDate())?1:0);
  const table=[10,11,12,14,16,18,20]; s.baseDays=table[Math.min(Math.max(years,0),6)];
  document.getElementById("baseDays").value=s.baseDays; saveSettings();
 }
+
 function saveSettings(){
  data.settings.join=document.getElementById("join").value;
  data.settings.baseDays=Math.max(0,Number(document.getElementById("baseDays").value)||0);
  data.settings.carryIn=Math.min(40,Math.max(0,Number(document.getElementById("carryIn").value)||0));
  data.settings.carryLimit=Math.min(40,Math.max(0,Number(document.getElementById("carryLimit").value)||40));
  save();render();
+ alert("設定を保存しました。");
 }
+
 function addLeave(){
  const d=document.getElementById("useDate").value, days=Number(document.getElementById("useDays").value), memo=document.getElementById("memo").value.trim();
  if(!d||!days||days<0.5){alert("使用日と日数を入力してください。");return}
- const used=data.leaves.reduce((a,x)=>a+Number(x.days),0), available=data.settings.baseDays+Math.min(data.settings.carryIn,data.settings.carryLimit)-used;
- if(days>available){alert("残日数を超える登録はできません。");return}
- data.leaves.push({date:d,days,memo});data.leaves.sort((a,b)=>a.date.localeCompare(b.date));save();
- document.getElementById("memo").value="";render();
+ 
+ // 有効な繰越数を計算（繰越上限を考慮）
+ const effectiveCarry = Math.min(Number(data.settings.carryIn)||0, Number(data.settings.carryLimit)||40);
+ const totalAvailable = (Number(data.settings.baseDays)||0) + effectiveCarry;
+ const used=data.leaves.reduce((a,x)=>a+Number(x.days),0);
+ 
+ if(days > (totalAvailable - used)){
+   if(!confirm("付与日数＋繰越日の合計を超過していますが、このまま登録しますか？")){
+     return;
+   }
+ }
+
+ data.leaves.push({date:d,days,memo});
+ data.leaves.sort((a,b)=>a.date.localeCompare(b.date));
+ save();
+ 
+ // 登録した日付の年・月にカレンダーや履歴の表示を合わせる
+ const targetDate = parseDate(d);
+ if(!isNaN(targetDate.getTime())){
+   view = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+   const sel = document.getElementById("historyYear");
+   if(sel) sel.value = targetDate.getFullYear();
+ }
+
+ document.getElementById("memo").value="";
+ render();
+ alert("有給を登録しました。");
 }
+
 function bulkOpen(){document.getElementById("bulkCard").style.display="block";document.getElementById("bulkText").focus()}
 function addBulk(){
  const dates=document.getElementById("bulkText").value.split(/[,，\n\s]+/).map(x=>x.trim()).filter(Boolean);
  if(!dates.length){alert("日付を入力してください。");return}
- const normalized=dates.map(x=>x.replaceAll("/","-")).filter(x=>/^\\d{4}-\\d{1,2}-\\d{1,2}$/.test(x)).map(x=>{let [y,m,d]=x.split("-").map(Number);return y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0")});
- let available=data.settings.baseDays+Math.min(data.settings.carryIn,data.settings.carryLimit)-data.leaves.reduce((a,x)=>a+Number(x.days),0);
- if(normalized.length>available){alert("残日数を超えるため登録できません。");return}
+ const normalized=dates.map(x=>x.replaceAll("/","-")).filter(x=>/^\d{4}-\d{1,2}-\d{1,2}$/.test(x)).map(x=>{let [y,m,d]=x.split("-").map(Number);return y+"-"+String(m).padStart(2,"0")+"-"+String(d).padStart(2,"0")});
  normalized.forEach(d=>data.leaves.push({date:d,days:1,memo:""}));
- data.leaves.sort((a,b)=>a.date.localeCompare(b.date));save();document.getElementById("bulkText").value="";document.getElementById("bulkCard").style.display="none";render();
+ data.leaves.sort((a,b)=>a.date.localeCompare(b.date));
+ save();
+ document.getElementById("bulkText").value="";
+ document.getElementById("bulkCard").style.display="none";
+ render();
+ alert(`${normalized.length}件の有給を一括登録しました。`);
 }
+
 function removeLeave(i){if(confirm("この履歴を削除しますか？")){data.leaves.splice(i,1);save();render()}}
 function clearAll(){if(confirm("すべての使用履歴を削除しますか？")){data.leaves=[];save();render()}}
+
 function monthUsed(){
- const y=currentYear(),m=new Date().getMonth()+1;
+ const y=view.getFullYear(), m=view.getMonth()+1;
  return data.leaves.filter(x=>{let d=parseDate(x.date);return d.getFullYear()===y&&d.getMonth()+1===m}).reduce((a,x)=>a+Number(x.days),0)
 }
+
 function renderCalendar(){
  const y=view.getFullYear(),m=view.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
  document.getElementById("calTitle").textContent=y+"年"+(m+1)+"月";
@@ -167,27 +224,75 @@ function renderCalendar(){
  }
  document.getElementById("calendar").innerHTML=h;
 }
-function moveMonth(n){view.setMonth(view.getMonth()+n);renderCalendar()}
+
+function moveMonth(n){view.setMonth(view.getMonth()+n);render Calendar?renderCalendar():render()}
+
 function renderHistory(){
- const ys=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])].sort((a,b)=>b-a);
- const sel=document.getElementById("historyYear"), old=sel.value;sel.innerHTML=ys.map(y=>`<option>${y}</option>`).join("");if(ys.includes(Number(old)))sel.value=old;
- const y=Number(sel.value)||currentYear(), rows=data.leaves.map((x,i)=>({...x,i})).filter(x=>parseDate(x.date).getFullYear()===y).sort((a,b)=>b.date.localeCompare(a.date));
- document.getElementById("history").innerHTML=rows.length?rows.map(x=>`<tr><td>${x.date.replaceAll("-","/")}</td><td>${fmt(x.days)}日</td><td>${escapeHtml(x.memo||"")}</td><td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td></tr>`).join(""):`<tr><td colspan="4" class="empty">履歴はありません</td></tr>`;
+ const years=[...new Set([currentYear(), ...data.leaves.map(x=>parseDate(x.date).getFullYear())])].filter(y=>!isNaN(y)).sort((a,b)=>b-a);
+ const sel=document.getElementById("historyYear");
+ const oldVal=sel.value;
+ sel.innerHTML=years.map(y=>`<option value="${y}">${y}年</option>`).join("");
+ if(years.includes(Number(oldVal))) sel.value=oldVal;
+ 
+ const selectedYear = Number(sel.value) || currentYear();
+ const rows=data.leaves.map((x,i)=>({...x,i}))
+   .filter(x=>parseDate(x.date).getFullYear()===selectedYear)
+   .sort((a,b)=>b.date.localeCompare(a.date));
+ 
+ document.getElementById("history").innerHTML=rows.length ? rows.map(x=>{
+   const dow = getDayOfWeek(x.date);
+   return `<tr><td>${x.date.replaceAll("-","/")} (${dow})</td><td>${fmt(x.days)}日</td><td>${escapeHtml(x.memo||"")}</td><td><button class="danger" onclick="removeLeave(${x.i})">削除</button></td></tr>`;
+ }).join("") : `<tr><td colspan="4" class="empty">履歴はありません</td></tr>`;
 }
+
 function renderYearSummary(){
- const years=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])].sort((a,b)=>b-a);
- document.getElementById("yearSummary").innerHTML=years.map(y=>{let used=data.leaves.filter(x=>parseDate(x.date).getFullYear()===y).reduce((a,x)=>a+Number(x.days),0);let pct=data.settings.baseDays?Math.min(100,used/data.settings.baseDays*100):0;return `<div style="margin:12px 0"><div class="row"><b>${y}年</b><span class="grow"></span>${fmt(used)}日使用</div><div class="bar"><i style="width:${pct}%"></i></div></div>`}).join("");
+ const years=[...new Set([currentYear(),...data.leaves.map(x=>parseDate(x.date).getFullYear())])].filter(y=>!isNaN(y)).sort((a,b)=>b-a);
+ const effectiveCarry = Math.min(Number(data.settings.carryIn)||0, Number(data.settings.carryLimit)||40);
+ const totalAvailable = (Number(data.settings.baseDays)||0) + effectiveCarry;
+ 
+ document.getElementById("yearSummary").innerHTML=years.map(y=>{
+   let used=data.leaves.filter(x=>parseDate(x.date).getFullYear()===y).reduce((a,x)=>a+Number(x.days),0);
+   let pct=totalAvailable ? Math.min(100, (used / totalAvailable) * 100) : 0;
+   return `<div style="margin:12px 0"><div class="row"><b>${y}年</b><span class="grow"></span>${fmt(used)}日使用</div><div class="bar"><i style="width:${pct}%"></i></div></div>`;
+ }).join("");
 }
+
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
 function render(){
- const s=data.settings, total=s.baseDays+Math.min(s.carryIn,s.carryLimit), used=data.leaves.reduce((a,x)=>a+Number(x.days),0), remain=Math.max(0,total-used), rate=total?Math.min(100,used/total*100):0;
- document.getElementById("remain").textContent=fmt(remain)+"日";document.getElementById("grant").textContent=fmt(s.baseDays)+"日";document.getElementById("monthUsed").textContent=fmt(monthUsed())+"日";document.getElementById("carry").textContent=fmt(Math.min(s.carryIn,s.carryLimit))+"日";document.getElementById("rate").textContent=Math.round(rate)+"%";document.getElementById("rateBar").style.width=rate+"%";
- document.getElementById("join").value=s.join||"";document.getElementById("baseDays").value=s.baseDays||"";document.getElementById("carryIn").value=s.carryIn||0;document.getElementById("carryLimit").value=s.carryLimit??40;
- renderCalendar();renderHistory();renderYearSummary();
+ const s=data.settings;
+ const baseDays = Number(s.baseDays) || 0;
+ const carryIn = Number(s.carryIn) || 0;
+ const carryLimit = Number(s.carryLimit) || 40;
+ const effectiveCarry = Math.min(carryIn, carryLimit);
+ 
+ const totalAvailable = baseDays + effectiveCarry;
+ const used = data.leaves.reduce((a,x)=>a+Number(x.days),0);
+ const remain = Math.max(0, totalAvailable - used);
+ const rate = totalAvailable ? Math.min(100, (used / totalAvailable) * 100) : 0;
+
+ document.getElementById("remain").textContent = fmt(remain) + "日";
+ document.getElementById("grant").textContent = fmt(baseDays) + "日";
+ document.getElementById("monthUsed").textContent = fmt(monthUsed()) + "日";
+ document.getElementById("carry").textContent = fmt(effectiveCarry) + "日";
+ document.getElementById("rate").textContent = Math.round(rate) + "%";
+ document.getElementById("rateBar").style.width = rate + "%";
+ 
+ document.getElementById("join").value = s.join || "";
+ document.getElementById("baseDays").value = s.baseDays || "";
+ document.getElementById("carryIn").value = s.carryIn || 0;
+ document.getElementById("carryLimit").value = s.carryLimit ?? 40;
+ 
+ renderCalendar();
+ renderHistory();
+ renderYearSummary();
 }
+
 function exportData(){const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="有給管理バックアップ.json";a.click();URL.revokeObjectURL(a.href)}
 function importData(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.settings||!Array.isArray(x.leaves))throw 0;data=x;save();render();alert("復元しました。")}catch{alert("バックアップファイルを読み込めませんでした。")}};r.readAsText(f);e.target.value=""}
-document.getElementById("useDate").value=todayKey();render();
+
+document.getElementById("useDate").value=todayKey();
+render();
 </script>
 </body>
 </html>

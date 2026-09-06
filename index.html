@@ -24,7 +24,7 @@ input,select{width:100%;background:white}button{cursor:pointer;background:white;
 button.primary{background:#2563eb;color:#fff;border-color:#2563eb}.danger{color:#dc2626;border-color:#fecaca}
 label{display:block;font-size:13px;font-weight:600;margin:10px 0 5px}
 .field{min-width:140px;flex:1}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.notice{background:#eff6ff;border-left:4px solid #2563eb;padding:10px 12px;border-radius:8px;font-size:13px}
+.notice{background:#eff6ff;border-left:4px solid #2563eb;padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px}
 .calendar-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.calendar-head button{min-width:44px}
 .calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.dow{text-align:center;font-size:12px;color:#64748b;padding:4px}
 .day{min-height:48px;border:1px solid #edf0f5;border-radius:9px;padding:5px;font-size:13px;background:#fff;position:relative}
@@ -34,7 +34,36 @@ label{display:block;font-size:13px;font-weight:600;margin:10px 0 5px}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 5px;border-bottom:1px solid #edf0f5}th{color:#64748b;font-weight:600}
 .empty{text-align:center;color:#94a3b8;padding:16px}.small{font-size:12px;color:#64748b}
 footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
-@media(max-width:599px){.row{display: flex;flex-direction: row;gap:8px; flex-wrap:nowrap;align-items: flex-end;}.row .field{min-width:0;flex:1 1 0%;width:0}.row input,.row select{width:100%;box-sizing:border-box;-webkit-appearance: none;min-width: 0;font-size: 13px;padding: 9px 6px;}.form-row{display: flex;flex-direction:row;align-items:flex-end;gap:8px}.form-row .field{min-width:0;flex:1 1 0%;width:0}.form-row label{margin-top:0;margin-bottom:5px;font-size: 12px;white-space: nowrap;}}
+
+/* iPhone/スマホ向け横並びスタイルの最適化 */
+@media(max-width:599px){
+  .row {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-end;
+  }
+  .row .field {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    width: 0 !important;
+  }
+  input, select {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
+    -webkit-appearance: none;
+    font-size: 13px;
+    padding: 9px 6px;
+  }
+  .row label {
+    margin-top: 0;
+    margin-bottom: 5px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
 @media(min-width:600px){.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
@@ -59,7 +88,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <div class="field"><label for="join">入社日</label><input id="join" type="date"></div>
 <div class="field"><label for="baseDays">今年の付与日数</label><input id="baseDays" type="number" min="0" step="0.5" placeholder="例：10"></div>
 </div>
-<div class="row">
+<div class="row" style="margin-top:10px">
 <div class="field"><label for="carryIn">前年度からの繰越</label><input id="carryIn" type="number" min="0" max="40" step="0.5" value="0"></div>
 <div class="field"><label for="carryLimit">繰越上限</label><input id="carryLimit" type="number" min="0" max="40" step="0.5" value="40"></div>
 </div>
@@ -72,7 +101,9 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 <div class="field"><label for="useDate">使用日</label><input id="useDate" type="date"></div>
 <div class="field"><label for="useDays">使用日数</label><input id="useDays" type="number" min="0.5" step="0.5" value="1"></div>
 </div>
+<div style="margin-top:10px">
 <label for="memo">メモ（任意）</label><input id="memo" placeholder="例：私用、通院など">
+</div>
 <div class="actions"><button class="primary" onclick="addLeave()">登録する</button><button onclick="bulkOpen()">一括登録</button></div>
 </section>
 
@@ -106,6 +137,7 @@ footer{text-align:center;color:#94a3b8;font-size:12px;padding:10px 0 28px}
 </section>
 <footer>有給管理アプリ / Safari対応・レスポンシブ対応</footer>
 </main>
+
 <script>
 const KEY = "leaveAppDataV2";
 let data = JSON.parse(localStorage.getItem(KEY) || '{"settings":{"join":"","baseDays":0,"carryIn":0,"carryLimit":40},"leaves":[]}');
